@@ -148,7 +148,7 @@ void draw_text(int x, int y, const char *text)
 			c = 29;
 		else if(c == '\'')
 			c = 28;
-		else if(c == ',')
+		else if(c == '+')
 			c = 27;
 		else if(c == '.')
 			c = 26;
@@ -258,16 +258,17 @@ void editor()
 						editor_tile = 7;
 					redraw = true;
 					break;
-				case SDLK_SPACE:
 				case SDLK_RETURN:
-					redraw = true;
 					if(keyboard_state[SDL_SCANCODE_LALT])
 					{
 						toggle_fullscreen();
 						redraw = 2;
+						break;
 					}
-					else
-						g_map[editor_y*g_map_w+editor_x] = editor_tile;
+				case SDLK_SPACE:
+				case SDLK_z:
+					redraw = true;
+					g_map[editor_y*g_map_w+editor_x] = editor_tile;
 					break;
 
 				case SDLK_w:
@@ -485,6 +486,44 @@ void game_over()
 	SDL_SetRenderDrawColor(g_renderer, 0x00, 0x00, 0x00, 0xff);
 }
 
+void teleport_actor_near(struct actor *a, int tx, int ty)
+{
+	int x1, y1, xi, yi;
+	bool xp = rand() % 2;
+	bool yp = rand() % 2;
+	xi = 8;
+	yi = 8;
+	if(xp)
+		x1 = 0;
+	else
+	{
+		x1 = g_map_w*8-8;
+		xi = -8;
+	}
+	if(yp)
+		y1 = 0;
+	else
+	{
+		y1 = g_map_h*8-8;
+		yi = -8;
+	}
+
+	for(int x = x1; x < g_map_w*8 && x >= 0; x += xi)
+		for(int y = y1; y < g_map_h*8 && y >= 0; y += yi)
+		{
+			int distance = pow(tx-x, 2) + pow(ty-y, 2);
+			if(distance < 50*50 || distance > 96*96)
+				continue;
+			int t = g_map[(y+4)/8*g_map_w+(x+4)/8];
+			if(!(t==0||t==4))
+				continue;
+
+			a->x = x;
+			a->y = y;
+			return;
+		}
+}
+
 void play_game()
 {
 	struct actor player, killer;
@@ -595,25 +634,26 @@ void play_game()
 			update_actor(&killer);
 			if(pow(player.x-killer.x, 2) + pow(player.y-killer.y, 2) < 50*50)
 				redraw = true;
+			else if(pow(player.x-killer.x, 2) + pow(player.y-killer.y, 2) > 160*160 && killer_chasing)
+				teleport_actor_near(&killer, player.x, player.y);
 
-			if(abs(camera_x - player.x - 4) > 20 || abs(camera_y - player.y - 4) > 15)
-			{
-				int xm = 1, ym = 1;
-				if(abs(camera_x - player.x - 4) > 40) xm *= 2;
-				if(abs(camera_y - player.y - 4) > 30) ym *= 2;
+			int xm, ym, ocx, ocy;
+			ocx = camera_x;
+			ocy = camera_y;
+			xm = abs(camera_x - player.x - 4) / 20;
+			ym = abs(camera_y - player.y - 4) / 15;
 
-				if(camera_x < player.x+4) camera_x += xm;
-				if(camera_y < player.y+4) camera_y += ym;
-				if(camera_x > player.x+4) camera_x -= xm;
-				if(camera_y > player.y+4) camera_y -= ym;
-
-				redraw = true;
-			}
+			if(camera_x < player.x+4-1) camera_x += xm;
+			if(camera_y < player.y+4) camera_y += ym;
+			if(camera_x > player.x+4) camera_x -= xm;
+			if(camera_y > player.y+4) camera_y -= ym;
 
 			if(camera_x - g_width/2 < 0) camera_x = g_width/2;
 			if(camera_y - g_height/2 < 0) camera_y = g_height/2;
 			if(camera_x + g_width/2 >= g_map_w*8) camera_x = g_map_w*8 - g_width/2 - 1;
 			if(camera_y + g_height/2 >= g_map_h*8) camera_y = g_map_h*8 - g_height/2 - 1;
+
+			if(camera_x != ocx || camera_y != ocy) redraw = true;
 
 			if(pow(player.x-killer.x, 2) + pow(player.y-killer.y, 2) < 7*7)
 			{
@@ -706,6 +746,8 @@ void main_menu()
 			draw_text(g_width/2 - 7*4, 6, "slasher escape");
 			draw_text(g_width/2 - 4*4, g_height/2-2*6, "new game\neditor\nquit");
 			draw_texture_region(g_tileset, (bool)(cursor_step / 10)*8, 4*8, 8, 8, g_width/2-8*4, g_height/2-2*6 + cursor_y*6+cursor_yo-1, 8, 8);
+			if(!g_fullscreen)
+				draw_text(g_width-20*4, g_height-6, "alt+enter:fullscreen");
 			SDL_RenderPresent(g_renderer);
 
 			redraw = false;
@@ -765,11 +807,23 @@ void main_menu()
 	}
 }
 
+void play_intro()
+{
+	SDL_RenderClear(g_renderer);
+	draw_text(g_width/2-7*4, g_height/2-2.5*6, "slasher escape");
+	SDL_RenderPresent(g_renderer);
+	SDL_Delay(750);
+	draw_text(g_width/2-12*4, g_height/2-0.5*6, "a game made by tyler dwsl\n  for the 4mb gamejam");
+	SDL_RenderPresent(g_renderer);
+	SDL_Delay(1500);
+}
+
 int main()
 {
 	time_t t;
 	srand(time(&t));
 	init_sdl();
+	play_intro();
 	main_menu();
 	end_sdl();
 	return 0;
