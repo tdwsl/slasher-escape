@@ -15,6 +15,7 @@ SDL_Window *g_window = NULL;
 SDL_Texture *g_tileset = NULL;
 SDL_Texture *g_font = NULL;
 SDL_Texture *g_vigenette = NULL;
+SDL_Texture *g_gameover = NULL;
 int g_scale = 4;
 int g_width = 160, g_height = 120;
 bool g_quit = false, g_fullscreen = false;
@@ -50,10 +51,13 @@ void init_sdl()
 	ensure(g_tileset = SDL_CreateTextureFromSurface(g_renderer, IMG_Load("data/tileset.png")), "tileset");
 	ensure(g_font = SDL_CreateTextureFromSurface(g_renderer, IMG_Load("data/font.png")), "font");
 	ensure(g_vigenette = SDL_CreateTextureFromSurface(g_renderer, IMG_Load("data/vigenette.png")), "vigenette");
+	ensure(g_gameover = SDL_CreateTextureFromSurface(g_renderer, IMG_Load("data/game_over.png")), "game over");
 }
 
 void end_sdl()
 {
+	SDL_DestroyTexture(g_gameover);
+	g_gameover = NULL;
 	SDL_DestroyTexture(g_vigenette);
 	g_vigenette = NULL;
 	SDL_DestroyTexture(g_font);
@@ -393,6 +397,94 @@ void update_actor(struct actor *a)
 			if(move_actor(a, a->xv*i, a->yv*i)) break;
 }
 
+void game_over()
+{
+	SDL_Event event;
+	int last_update = SDL_GetTicks();
+	bool quit = false, redraw = true;
+	int frame = 0, stage = 0;
+	int max_frames[4] = {25, 40, 50, 50};
+
+	while(!quit)
+	{
+		while(SDL_PollEvent(&event))
+		{
+			switch(event.type)
+			{
+			case SDL_QUIT:
+				g_quit = true;
+				quit = true;
+				break;
+			case SDL_KEYDOWN:
+				switch(event.key.keysym.sym)
+				{
+				case SDLK_ESCAPE:
+				case SDLK_q:
+					quit = true;
+					break;
+				case SDLK_SPACE:
+				case SDLK_z:
+				case SDLK_x:
+				case SDLK_RETURN:
+					if(stage == 3)
+						quit = true;
+					break;
+				}
+				break;
+			}
+		}
+
+		if(redraw)
+		{
+			SDL_RenderClear(g_renderer);
+			float mul = (float)frame/max_frames[stage];
+			switch(stage)
+			{
+			case 0:
+				draw_texture_region(g_gameover, 0, 0, 40, 60, g_width-20-mul*g_width/2, g_height/2-50, 40, 60);
+				draw_texture_region(g_gameover, 0, 60, 40, 60, mul*g_width/2-20, g_height-60+2, 40, 60);
+				break;
+			case 1:
+				draw_texture_region(g_gameover, 40, 0, 40, 60, g_width/2-20, g_height/2-50-mul*10, 40, 60);
+				draw_texture_region(g_gameover, 40, 60, 40, 60, g_width/2-20, g_height-60+2+mul*15, 40, 60);
+				break;
+			case 2:
+				draw_texture_region(g_gameover, 80, 0, 40, 60, g_width/2-20, g_height/2-30-mul*15, 40, 60);
+				draw_texture_region(g_gameover, 80, 60, 40, 60, g_width/2-20, g_height-60+2+mul*10, 40, 60);
+				break;
+			case 3:
+				draw_texture_region(g_gameover, 120, 0, 40, 60, g_width/2-20, g_height/2-60, 40, 60);
+				draw_texture_region(g_gameover, 120, 60, 40, 60, g_width/2-20, g_height-60+2, 40, 60);
+				draw_text(g_width/2-4.5*4, g_height/2-3, "game over");
+				break;
+			}
+			SDL_RenderPresent(g_renderer);
+		}
+
+		int current_time = SDL_GetTicks();
+		if(current_time - last_update > 30)
+		{
+			if(stage < 3)
+			{
+				frame++;
+				if(frame > max_frames[stage])
+				{
+					stage++;
+					frame = 0;
+					if(stage == 2)
+						SDL_SetRenderDrawColor(g_renderer, 0xff, 0x00, 0x00, 0xff);
+				}
+			}
+
+			redraw = true;
+
+			last_update = current_time;
+		}
+	}
+
+	SDL_SetRenderDrawColor(g_renderer, 0x00, 0x00, 0x00, 0xff);
+}
+
 void play_game()
 {
 	struct actor player, killer;
@@ -467,8 +559,11 @@ void play_game()
 				killer_chase_counter--;
 			else
 			{
-				killer_chase_counter = 100 + rand() % 50;
 				killer_chasing = !killer_chasing;
+				if(killer_chasing)
+					killer_chase_counter = 150 + rand() % 75;
+				else
+					killer_chase_counter = 100 - rand() % 50;
 			}
 
 			killer.xv = 0;
@@ -519,6 +614,13 @@ void play_game()
 			if(camera_y - g_height/2 < 0) camera_y = g_height/2;
 			if(camera_x + g_width/2 >= g_map_w*8) camera_x = g_map_w*8 - g_width/2 - 1;
 			if(camera_y + g_height/2 >= g_map_h*8) camera_y = g_map_h*8 - g_height/2 - 1;
+
+			if(pow(player.x-killer.x, 2) + pow(player.y-killer.y, 2) < 7*7)
+			{
+				game_over();
+				quit = true;
+				redraw = false;
+			}
 
 			last_update = current_time;
 		}
