@@ -9,6 +9,7 @@
 
 #define WINDOW_W 640
 #define WINDOW_H 480
+#define MAX_STUFF 25
 
 SDL_Renderer *g_renderer = NULL;
 SDL_Window *g_window = NULL;
@@ -24,8 +25,16 @@ struct actor
 {
 	int xv, yv, skin, d;
 	float x, y, speed;
+	int near_door;
 };
 
+struct door
+{
+	int x, y;
+	bool open;
+};
+
+struct door *g_doors[MAX_STUFF];
 int *g_map;
 int g_map_w, g_map_h;
 
@@ -88,7 +97,7 @@ void draw_texture_region(SDL_Texture *texture, int cx, int cy, int cw, int ch, i
 	SDL_RenderCopy(g_renderer, texture, &clip, &dest);
 }
 
-void save_level(const char *filename)
+void save_map(const char *filename)
 {
 	FILE *fp = fopen(filename, "w");
 	fprintf(fp, "%d %d\n", g_map_w, g_map_h);
@@ -101,7 +110,7 @@ void save_level(const char *filename)
 	fclose(fp);
 }
 
-void new_level(int w, int h)
+void new_map(int w, int h)
 {
 	g_map_w = w;
 	g_map_h = h;
@@ -110,7 +119,7 @@ void new_level(int w, int h)
 		g_map[i] = 0;
 }
 
-void load_level(const char *filename)
+void load_map(const char *filename)
 {
 	FILE *fp = fopen(filename, "r");
 	fscanf(fp, "%d %d", &g_map_w, &g_map_h);
@@ -168,10 +177,10 @@ void init_map()
 	if(fp)
 	{
 		fclose(fp);
-		load_level("data/level.lvl");
+		load_map("data/level.lvl");
 	}
 	else
-		new_level(150, 100);
+		new_map(150, 100);
 }
 
 void toggle_fullscreen()
@@ -272,7 +281,7 @@ void editor()
 					break;
 
 				case SDLK_w:
-					save_level("data/level.lvl");
+					save_map("data/level.lvl");
 					draw_text(0, g_height-6, "saved");
 					SDL_RenderPresent(g_renderer);
 					break;
@@ -322,6 +331,7 @@ void init_actor(struct actor *a, int x, int y, int skin)
 	a->skin = skin;
 	a->d = 0;
 	a->speed = 1;
+	a->near_door = -1;
 }
 
 void draw_actor(struct actor a, int xo, int yo)
@@ -396,6 +406,17 @@ void update_actor(struct actor *a)
 	if(a->xv != 0 || a->yv != 0)
 		for(float i = a->speed; i > 0; i -= 0.05)
 			if(move_actor(a, a->xv*i, a->yv*i)) break;
+	a->near_door = -1;
+	for(int i = 0; g_doors[i] != 0; i++)
+	{
+		struct door *d = g_doors[i];
+		int dist = pow(d->x*8-a->x, 2) + pow(d->y*8-a->y, 2);
+		if(dist < 12*12 && dist > 6*6)
+		{
+			a->near_door = i;
+			break;
+		}
+	}
 }
 
 void game_over()
@@ -524,10 +545,57 @@ void teleport_actor_near(struct actor *a, int tx, int ty)
 		}
 }
 
+void add_door(int x, int y)
+{
+	struct door *d;
+	d = malloc(sizeof(struct door));
+	d->open = false;
+	d->x = x;
+	d->y = y;
+	int i;
+	for(i = 0; g_doors[i] != 0; i++);
+	g_doors[i] = d;
+}
+
+void delete_door(struct door *d)
+{
+	int i, j;
+	for(i = 0; g_doors[i] != d; i++);
+	for(j = 0; g_doors[j+1] != 0; j++);
+	free(d);
+	g_doors[i] = g_doors[j];
+	g_doors[j] = 0;
+}
+
+void free_doors()
+{
+	for(int i = 0; g_doors[i] != 0; i++)
+		free(g_doors[i]);
+}
+
+void init_doors()
+{
+	for(int i = 0; i < MAX_STUFF; i++)
+		g_doors[i] = 0;
+	for(int x = 0; x < g_map_w; x++)
+		for(int y = 0; y < g_map_h; y++)
+			if(g_map[y*g_map_w+x] == 5)
+				add_door(x, y);
+}
+
+void toggle_door(struct door *d)
+{
+	d->open = !d->open;
+	int t;
+	d->open ? (t = 9) : (t = 5);
+	g_map[d->y*g_map_w+d->x] = t;
+}
+
 void play_game()
 {
 	struct actor player, killer;
 	init_map();
+	init_doors();
 	spawn_player_and_killer(&player, &killer);
 
 	SDL_Event event;
@@ -568,6 +636,11 @@ void play_game()
 					break;
 				case SDLK_RIGHT:
 					player.xv = 1;
+					break;
+				case SDLK_z:
+					if(player.near_door > -1)
+						toggle_door(g_doors[player.near_door]);
+					redraw = true;
 					break;
 				}
 				break;
@@ -681,6 +754,13 @@ void play_game()
 			draw_actor(player, xo, yo);
 			if(pow(player.x-killer.x, 2) + pow(player.y-killer.y, 2) < 50*50)
 				draw_actor(killer, xo, yo);
+			if(player.near_door != -1)
+			{
+				if(g_doors[player.near_door]->open)
+					draw_text(player.x-xo-5*4, player.y-yo-6-1, "z:close door");
+				else
+					draw_text(player.x-xo-5.5*4, player.y-yo-6-1, "z:open door");
+			}
 			draw_texture_region(g_vigenette, 0, 0, 160, 120, player.x+4-80-xo, player.y+4-60-yo, 160, 120);
 			SDL_RenderPresent(g_renderer);
 
@@ -689,6 +769,7 @@ void play_game()
 	}
 
 	free(g_map);
+	free_doors();
 }
 
 void main_menu()
