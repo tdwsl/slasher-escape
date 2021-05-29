@@ -10,6 +10,7 @@
 #define WINDOW_W 640
 #define WINDOW_H 480
 #define MAX_STUFF 25
+#define PI 3.14159
 
 SDL_Renderer *g_renderer = NULL;
 SDL_Window *g_window = NULL;
@@ -25,16 +26,9 @@ struct actor
 {
 	int xv, yv, skin, d;
 	float x, y, speed;
-	int near_door;
+	bool near_open_door, near_closed_door, near_closed_cabinet;
 };
 
-struct door
-{
-	int x, y;
-	bool open;
-};
-
-struct door *g_doors[MAX_STUFF];
 int *g_map;
 int g_map_w, g_map_h;
 
@@ -331,7 +325,9 @@ void init_actor(struct actor *a, int x, int y, int skin)
 	a->skin = skin;
 	a->d = 0;
 	a->speed = 1;
-	a->near_door = -1;
+	a->near_open_door = false;
+	a->near_closed_door = false;
+	a->near_closed_cabinet = false;
 }
 
 void draw_actor(struct actor a, int xo, int yo)
@@ -381,7 +377,7 @@ bool move_actor(struct actor *a, float x, float y)
 			if(tx < 0 || ty < 0 || tx >= g_map_w || ty >= g_map_h)
 				continue;
 			int t = g_map[ty*g_map_w+tx];
-			if(t==2||t==3||t==5||t==6||t==7)
+			if(t==2||t==3||t==5||t==6||t==7||t==11)
 				if(within_tile(x1, y1, tx, ty) || within_tile(x2, y1, tx, ty) || within_tile(x1, y2, tx, ty) || within_tile(x2, y2, tx, ty))
 					return false;
 		}
@@ -406,14 +402,34 @@ void update_actor(struct actor *a)
 	if(a->xv != 0 || a->yv != 0)
 		for(float i = a->speed; i > 0; i -= 0.05)
 			if(move_actor(a, a->xv*i, a->yv*i)) break;
-	a->near_door = -1;
-	for(int i = 0; g_doors[i] != 0; i++)
+
+	a->near_open_door = false;
+	a->near_closed_door = false;
+	a->near_closed_cabinet = false;
+	int offsets[8] = {
+		0, -1,
+		0, 1,
+		-1, 0,
+		1, 0,
+	};
+	for(int i = 0; i < 4; i++)
 	{
-		struct door *d = g_doors[i];
-		int dist = pow(d->x*8-a->x, 2) + pow(d->y*8-a->y, 2);
-		if(dist < 12*12 && dist > 6*6)
+		int x = a->x+4+offsets[i*2]*8;
+		int y = a->y+4+offsets[i*2+1]*8;
+		int t = tile_at(x, y);
+		if(t == 7)
 		{
-			a->near_door = i;
+			a->near_closed_cabinet = true;
+			break;
+		}
+		if(t == 5)
+		{
+			a->near_closed_door = true;
+			break;
+		}
+		if(t == 9)
+		{
+			a->near_open_door = true;
 			break;
 		}
 	}
@@ -509,93 +525,56 @@ void game_over()
 
 void teleport_actor_near(struct actor *a, int tx, int ty)
 {
-	int x1, y1, xi, yi;
-	bool xp = rand() % 2;
-	bool yp = rand() % 2;
-	xi = 8;
-	yi = 8;
-	if(xp)
-		x1 = 0;
-	else
+	int x, y;
+	while(1)
 	{
-		x1 = g_map_w*8-8;
-		xi = -8;
+		float a = (rand() % (int)(PI*1000))/1000;
+		int dist = 55 + rand() % 20;
+		x = (tx+cosf(a)*dist)/8;
+		y = (ty+sinf(a)*dist)/8;
+		int t = g_map[y*g_map_w+x];
+		if(t == 0 || t == 4)
+			break;
 	}
-	if(yp)
-		y1 = 0;
-	else
-	{
-		y1 = g_map_h*8-8;
-		yi = -8;
-	}
+	a->x = x*8;
+	a->y = y*8;
+}
 
-	for(int x = x1; x < g_map_w*8 && x >= 0; x += xi)
-		for(int y = y1; y < g_map_h*8 && y >= 0; y += yi)
+void actor_interact_tile(struct actor a)
+{
+	int offsets[8] = {
+		0, -1,
+		0, 1,
+		-1, 0,
+		1, 0,
+	};
+	for(int i = 0; i < 4; i++)
+	{
+		int x = a.x + 4 + offsets[i*2]*8;
+		int y = a.y + 4 + offsets[i*2+1]*8;
+		int *t = &g_map[(y/8)*g_map_w+(x/8)];
+		if(*t == 7)
 		{
-			int distance = pow(tx-x, 2) + pow(ty-y, 2);
-			if(distance < 50*50 || distance > 96*96)
-				continue;
-			int t = g_map[(y+4)/8*g_map_w+(x+4)/8];
-			if(!(t==0||t==4))
-				continue;
-
-			a->x = x;
-			a->y = y;
-			return;
+			*t = 11;
+			break;
 		}
-}
-
-void add_door(int x, int y)
-{
-	struct door *d;
-	d = malloc(sizeof(struct door));
-	d->open = false;
-	d->x = x;
-	d->y = y;
-	int i;
-	for(i = 0; g_doors[i] != 0; i++);
-	g_doors[i] = d;
-}
-
-void delete_door(struct door *d)
-{
-	int i, j;
-	for(i = 0; g_doors[i] != d; i++);
-	for(j = 0; g_doors[j+1] != 0; j++);
-	free(d);
-	g_doors[i] = g_doors[j];
-	g_doors[j] = 0;
-}
-
-void free_doors()
-{
-	for(int i = 0; g_doors[i] != 0; i++)
-		free(g_doors[i]);
-}
-
-void init_doors()
-{
-	for(int i = 0; i < MAX_STUFF; i++)
-		g_doors[i] = 0;
-	for(int x = 0; x < g_map_w; x++)
-		for(int y = 0; y < g_map_h; y++)
-			if(g_map[y*g_map_w+x] == 5)
-				add_door(x, y);
-}
-
-void toggle_door(struct door *d)
-{
-	d->open = !d->open;
-	int t;
-	d->open ? (t = 9) : (t = 5);
-	g_map[d->y*g_map_w+d->x] = t;
+		if(*t == 5)
+		{
+			*t = 9;
+			break;
+		}
+		if(*t == 9)
+		{
+			*t = 5;
+			break;
+		}
+	}
 }
 
 void play_game()
 {
 	struct actor player, killer;
 	init_map();
-	init_doors();
 	spawn_player_and_killer(&player, &killer);
 
 	SDL_Event event;
@@ -638,9 +617,11 @@ void play_game()
 					player.xv = 1;
 					break;
 				case SDLK_z:
-					if(player.near_door > -1)
-						toggle_door(g_doors[player.near_door]);
-					redraw = true;
+					if(player.near_open_door||player.near_closed_door||player.near_closed_cabinet)
+					{
+						actor_interact_tile(player);
+						redraw = true;
+					}
 					break;
 				}
 				break;
@@ -735,41 +716,40 @@ void play_game()
 				redraw = false;
 			}
 
+			if(redraw)
+			{
+				SDL_RenderClear(g_renderer);
+				int xo = camera_x-g_width/2;
+				int yo = camera_y-g_height/2;
+				for(int x = (player.x+4-40)/8-1; x < (player.x+4+40)/8+1; x++)
+					for(int y = (player.y+4-30)/8-1; y < (player.y+4+30)/8+1; y++)
+					{
+						if(y < 0 || x < 0 || y >= g_map_h || x >= g_map_w)
+							continue;
+						int t = g_map[y*g_map_w+x];
+						draw_texture_region(g_tileset, (t % 4)*8, (t / 4)*8, 8, 8, x*8-xo, y*8-yo, 8, 8);
+					}
+				draw_actor(player, xo, yo);
+				if(pow(player.x-killer.x, 2) + pow(player.y-killer.y, 2) < 50*50)
+					draw_actor(killer, xo, yo);
+				if(player.near_open_door)
+					draw_text(player.x-xo-5*4, player.y-yo-6-1, "z:close door");
+				else if(player.near_closed_door)
+					draw_text(player.x-xo-5.5*4, player.y-yo-6-1, "z:open door");
+				else if(player.near_closed_cabinet)
+					draw_text(player.x-xo-4*4, player.y-yo-6-1, "z:search");
+				draw_texture_region(g_vigenette, 0, 0, 160, 120, player.x+4-80-xo, player.y+4-60-yo, 160, 120);
+				SDL_RenderPresent(g_renderer);
+
+				redraw = false;
+			}
+
 			last_update = current_time;
 		}
 
-		if(redraw)
-		{
-			SDL_RenderClear(g_renderer);
-			int xo = camera_x-g_width/2;
-			int yo = camera_y-g_height/2;
-			for(int x = (player.x+4-40)/8-1; x < (player.x+4+40)/8+1; x++)
-				for(int y = (player.y+4-30)/8-1; y < (player.y+4+30)/8+1; y++)
-				{
-					if(y < 0 || x < 0 || y >= g_map_h || x >= g_map_w)
-						continue;
-					int t = g_map[y*g_map_w+x];
-					draw_texture_region(g_tileset, (t % 4)*8, (t / 4)*8, 8, 8, x*8-xo, y*8-yo, 8, 8);
-				}
-			draw_actor(player, xo, yo);
-			if(pow(player.x-killer.x, 2) + pow(player.y-killer.y, 2) < 50*50)
-				draw_actor(killer, xo, yo);
-			if(player.near_door != -1)
-			{
-				if(g_doors[player.near_door]->open)
-					draw_text(player.x-xo-5*4, player.y-yo-6-1, "z:close door");
-				else
-					draw_text(player.x-xo-5.5*4, player.y-yo-6-1, "z:open door");
-			}
-			draw_texture_region(g_vigenette, 0, 0, 160, 120, player.x+4-80-xo, player.y+4-60-yo, 160, 120);
-			SDL_RenderPresent(g_renderer);
-
-			redraw = false;
-		}
 	}
 
 	free(g_map);
-	free_doors();
 }
 
 void main_menu()
@@ -897,6 +877,7 @@ void play_intro()
 	draw_text(g_width/2-12*4, g_height/2-0.5*6, "a game made by tyler dwsl\n  for the 4mb gamejam");
 	SDL_RenderPresent(g_renderer);
 	SDL_Delay(1500);
+	SDL_FlushEvent(SDL_KEYDOWN);
 }
 
 int main()
