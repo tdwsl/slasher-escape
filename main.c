@@ -26,7 +26,7 @@ struct actor
 {
 	int xv, yv, skin, d;
 	float x, y, speed;
-	bool near_open_door, near_closed_door, near_closed_cabinet;
+	bool near_open_door, near_closed_door, near_closed_cabinet, near_window;
 };
 
 int *g_map;
@@ -328,6 +328,7 @@ void init_actor(struct actor *a, int x, int y, int skin)
 	a->near_open_door = false;
 	a->near_closed_door = false;
 	a->near_closed_cabinet = false;
+	a->near_window = false;
 }
 
 void draw_actor(struct actor a, int xo, int yo)
@@ -382,14 +383,19 @@ bool move_actor(struct actor *a, float x, float y)
 					return false;
 		}
 
-	if(y < 0) a->d = 2;
-	else if(y > 0) a->d = 0;
-	if(x < 0) a->d = 3;
-	else if(x > 0) a->d = 1;
-
 	a->x = dx;
 	a->y = dy;
 	return true;
+}
+
+bool move_actor_and_slide(struct actor *a, float sa, float v)
+{
+	for(float am = 0; am < PI*0.4; am += 0.01)
+	{
+		if(move_actor(a, cosf(sa+am)*v, sinf(sa+am)*v)) return true;
+		if(move_actor(a, cosf(sa-am)*v, sinf(sa-am)*v)) return true;
+	}
+	return false;
 }
 
 int tile_at(int x, int y)
@@ -400,12 +406,60 @@ int tile_at(int x, int y)
 void update_actor(struct actor *a)
 {
 	if(a->xv != 0 || a->yv != 0)
-		for(float i = a->speed; i > 0; i -= 0.05)
-			if(move_actor(a, a->xv*i, a->yv*i)) break;
+	{
+		float ma = atan2(a->yv, a->xv);
+		float i;
+		for(i = a->speed; i > 0; i -= 0.05)
+			if(move_actor_and_slide(a, ma, i)) break;
+		if(i > 0)
+		{
+			if(a->yv < 0) a->d = 2;
+			else if(a->yv > 0) a->d = 0;
+			if(a->xv < 0) a->d = 3;
+			else if(a->xv > 0) a->d = 1;
+		}
+	}
 
 	a->near_open_door = false;
 	a->near_closed_door = false;
 	a->near_closed_cabinet = false;
+	a->near_window = false;
+	int offsets[8] = {
+		0, -1,
+		0, 1,
+		-1, 0,
+		1, 0,
+	};
+	bool touched_interactable = false;
+	for(int i = 0; i < 4; i++)
+	{
+		int x = a->x+4+offsets[i*2]*8;
+		int y = a->y+4+offsets[i*2+1]*8;
+		int t = tile_at(x, y);
+		if(t == 6)
+			a->near_window = true;
+		if(touched_interactable)
+			continue;
+		if(t == 7)
+		{
+			a->near_closed_cabinet = true;
+			touched_interactable = true;
+		}
+		else if(t == 5)
+		{
+			a->near_closed_door = true;
+			touched_interactable = true;
+		}
+		else if(t == 9)
+		{
+			a->near_open_door = true;
+			touched_interactable = true;
+		}
+	}
+}
+
+void actor_smash(struct actor a)
+{
 	int offsets[8] = {
 		0, -1,
 		0, 1,
@@ -414,22 +468,17 @@ void update_actor(struct actor *a)
 	};
 	for(int i = 0; i < 4; i++)
 	{
-		int x = a->x+4+offsets[i*2]*8;
-		int y = a->y+4+offsets[i*2+1]*8;
-		int t = tile_at(x, y);
-		if(t == 7)
+		int x = a.x+4+offsets[i*2]*8;
+		int y = a.y+4+offsets[i*2+1]*8;
+		int *t = &g_map[(y/8)*g_map_w+(x/8)];
+		if(*t == 6)
 		{
-			a->near_closed_cabinet = true;
+			*t = 10;
 			break;
 		}
-		if(t == 5)
+		if(*t == 5)
 		{
-			a->near_closed_door = true;
-			break;
-		}
-		if(t == 9)
-		{
-			a->near_open_door = true;
+			*t = 8;
 			break;
 		}
 	}
@@ -669,6 +718,11 @@ void play_game()
 			{
 				killer.yv *= -1;
 				killer.xv *= -1;
+			}
+			if((killer.near_window||killer.near_closed_door) && killer_chasing)
+			{
+				actor_smash(killer);
+				redraw = true;
 			}
 
 			if(tile_at(player.x+4, player.y+4) == 4)
