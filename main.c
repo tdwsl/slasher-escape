@@ -404,7 +404,7 @@ void game_over()
 	int last_update = SDL_GetTicks();
 	bool quit = false, redraw = true;
 	int frame = 0, stage = 0;
-	int max_frames[4] = {25, 40, 50, 50};
+	int max_frames[4] = {12, 20, 25, 50};
 
 	while(!quit)
 	{
