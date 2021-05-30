@@ -24,14 +24,15 @@ bool g_quit = false, g_fullscreen = false;
 
 struct actor
 {
-	int xv, yv, skin, d;
+	int xv, yv, skin, d, near_item;
 	float x, y, speed;
 	bool near_open_door, near_closed_door, near_closed_cabinet, near_window;
 };
 
 struct item
 {
-	int type, x, y;
+	int type;
+	float x, y, xv, yv;
 };
 
 int *g_map;
@@ -95,6 +96,26 @@ void draw_texture_region(SDL_Texture *texture, int cx, int cy, int cw, int ch, i
 	dest.h = dh * g_scale;
 
 	SDL_RenderCopy(g_renderer, texture, &clip, &dest);
+}
+
+void draw_pixel(int x, int y)
+{
+	SDL_Rect r;
+	r.x = x * g_scale;
+	r.y = y * g_scale;
+	r.w = g_scale;
+	r.h = g_scale;
+	SDL_RenderFillRect(g_renderer, &r);
+}
+
+void draw_box(int x, int y, int w, int h)
+{
+	SDL_Rect r;
+	r.x = x * g_scale;
+	r.y = y * g_scale;
+	r.w = w * g_scale;
+	r.h = h * g_scale;
+	SDL_RenderFillRect(g_renderer, &r);
 }
 
 void save_map(const char *filename)
@@ -251,20 +272,15 @@ void editor()
 				case SDLK_RIGHT:
 					if(editor_x < g_map_w-1)
 					{
-						redraw = true;
 						editor_x++;
+						redraw = true;
 					}
 					break;
-
 				case SDLK_TAB:
-					if(keyboard_state[SDL_SCANCODE_LSHIFT])
-						editor_tile--;
-					else
-						editor_tile++;
+				case SDLK_x:
+					editor_tile++;
 					if(editor_tile > 7)
 						editor_tile = 0;
-					if(editor_tile < 0)
-						editor_tile = 7;
 					redraw = true;
 					break;
 				case SDLK_RETURN:
@@ -305,11 +321,11 @@ void editor()
 					int t = g_map[y*g_map_w+x];
 					draw_texture_region(g_tileset, (t % 4)*8, (t / 4)*8, 8, 8, (-editor_x+x)*8+g_width/2-4, (-editor_y+y)*8+g_height/2-4, 8, 8);
 				}
-			draw_texture_region(g_tileset, 3*8, 3*8, 8, 8, g_width/2-4, g_height/2-4, 8, 8);
-			draw_text(0, 0, "w:save q:quit\ntab:switch\nspace:place");
+			draw_texture_region(g_tileset, 3*8, 7*8, 8, 8, g_width/2-4, g_height/2-4, 8, 8);
+			draw_text(0, 0, "w:save q:quit\nx:switch\nz:place");
 			draw_text(g_width-9*4-8, 0, "selected:");
 			draw_texture_region(g_tileset, (editor_tile % 4)*8, (editor_tile / 4)*8, 8, 8, g_width-8, 0, 8, 8);
-			draw_texture_region(g_tileset, 3*8, 3*8, 8, 8, g_width-8, 0, 8, 8);
+			draw_texture_region(g_tileset, 3*8, 7*8, 8, 8, g_width-8, 0, 8, 8);
 			char coords[25];
 			sprintf(coords, "x:%d y:%d", editor_x, editor_y);
 			draw_text(g_width - strlen(coords)*4, g_height - 6, coords);
@@ -320,174 +336,6 @@ void editor()
 	}
 
 	free(g_map);
-}
-
-void init_actor(struct actor *a, int x, int y, int skin)
-{
-	a->x = x*8;
-	a->y = y*8;
-	a->xv = 0;
-	a->yv = 0;
-	a->skin = skin;
-	a->d = 0;
-	a->speed = 1;
-	a->near_open_door = false;
-	a->near_closed_door = false;
-	a->near_closed_cabinet = false;
-	a->near_window = false;
-}
-
-void draw_actor(struct actor a, int xo, int yo)
-{
-	bool step;
-	a.xv != 0 ? (step = ((int)a.x/8) % 2) : (step = ((int)a.y/8) % 2);
-	draw_texture_region(g_tileset, a.skin*16 + step*8, 4*8 + a.d*8, 8, 8, a.x-xo, a.y-yo, 8, 8);
-}
-
-void spawn_player_and_killer(struct actor *p, struct actor *k)
-{
-	int x, y;
-	while(1)
-	{
-		x = rand() % g_map_w;
-		y = rand() % g_map_h;
-		if(g_map[y*g_map_w+x] == 0)
-			break;
-	}
-	init_actor(p, x, y, 0);
-
-	while(1)
-	{
-		x = rand() % g_map_w;
-		y = rand() % g_map_h;
-		if(g_map[y*g_map_w+x] == 0 && (p->x-x*8)*(p->x-x*8)+(p->y-y*8)*(p->y-y*8) > 160*160)
-			break;
-	}
-	init_actor(k, x, y, 1);
-}
-
-bool within_tile(int x, int y, int tx, int ty)
-{
-	return (x > tx*8 && y > ty*8 && x < tx*8+8 && y < ty*8+8);
-}
-
-bool move_actor(struct actor *a, float x, float y)
-{
-	float dx = a->x+x, dy = a->y+y;
-	int x1 = dx+2, y1 = dy+1, x2 = dx+6, y2 = dy+8;
-
-	if(x1 < 0 || y1 < 0 || x2 >= g_map_w*8 || y2 >= g_map_h*8)
-		return false;
-	for(int tx = x1/8-1; tx <= x2/8+1; tx++)
-		for(int ty = y1/8-1; ty <= y2/8+1; ty++)
-		{
-			if(tx < 0 || ty < 0 || tx >= g_map_w || ty >= g_map_h)
-				continue;
-			int t = g_map[ty*g_map_w+tx];
-			if(t==2||t==3||t==5||t==6||t==7||t==11)
-				if(within_tile(x1, y1, tx, ty) || within_tile(x2, y1, tx, ty) || within_tile(x1, y2, tx, ty) || within_tile(x2, y2, tx, ty))
-					return false;
-		}
-
-	a->x = dx;
-	a->y = dy;
-	return true;
-}
-
-bool move_actor_and_slide(struct actor *a, float sa, float v)
-{
-	for(float am = 0; am < PI*0.4; am += 0.01)
-	{
-		if(move_actor(a, cosf(sa+am)*v, sinf(sa+am)*v)) return true;
-		if(move_actor(a, cosf(sa-am)*v, sinf(sa-am)*v)) return true;
-	}
-	return false;
-}
-
-int tile_at(int x, int y)
-{
-	return g_map[(y/8)*g_map_w+(x/8)];
-}
-
-void update_actor(struct actor *a)
-{
-	if(a->xv != 0 || a->yv != 0)
-	{
-		float ma = atan2(a->yv, a->xv);
-		float i;
-		for(i = a->speed; i > 0; i -= 0.05)
-			if(move_actor_and_slide(a, ma, i)) break;
-		if(i > 0)
-		{
-			if(a->yv < 0) a->d = 2;
-			else if(a->yv > 0) a->d = 0;
-			if(a->xv < 0) a->d = 3;
-			else if(a->xv > 0) a->d = 1;
-		}
-	}
-
-	a->near_open_door = false;
-	a->near_closed_door = false;
-	a->near_closed_cabinet = false;
-	a->near_window = false;
-	int offsets[8] = {
-		0, -1,
-		0, 1,
-		-1, 0,
-		1, 0,
-	};
-	bool touched_interactable = false;
-	for(int i = 0; i < 4; i++)
-	{
-		int x = a->x+4+offsets[i*2]*8;
-		int y = a->y+4+offsets[i*2+1]*8;
-		int t = tile_at(x, y);
-		if(t == 6)
-			a->near_window = true;
-		if(touched_interactable)
-			continue;
-		if(t == 7)
-		{
-			a->near_closed_cabinet = true;
-			touched_interactable = true;
-		}
-		else if(t == 5)
-		{
-			a->near_closed_door = true;
-			touched_interactable = true;
-		}
-		else if(t == 9)
-		{
-			a->near_open_door = true;
-			touched_interactable = true;
-		}
-	}
-}
-
-void actor_smash(struct actor a)
-{
-	int offsets[8] = {
-		0, -1,
-		0, 1,
-		-1, 0,
-		1, 0,
-	};
-	for(int i = 0; i < 4; i++)
-	{
-		int x = a.x+4+offsets[i*2]*8;
-		int y = a.y+4+offsets[i*2+1]*8;
-		int *t = &g_map[(y/8)*g_map_w+(x/8)];
-		if(*t == 6)
-		{
-			*t = 10;
-			break;
-		}
-		if(*t == 5)
-		{
-			*t = 8;
-			break;
-		}
-	}
 }
 
 void game_over()
@@ -578,6 +426,161 @@ void game_over()
 	SDL_SetRenderDrawColor(g_renderer, 0x00, 0x00, 0x00, 0xff);
 }
 
+void init_actor(struct actor *a, int x, int y, int skin)
+{
+	a->x = x*8;
+	a->y = y*8;
+	a->xv = 0;
+	a->yv = 0;
+	a->skin = skin;
+	a->d = 0;
+	a->speed = 1;
+	a->near_open_door = false;
+	a->near_closed_door = false;
+	a->near_closed_cabinet = false;
+	a->near_window = false;
+	a->near_item = -1;
+}
+
+void draw_actor(struct actor a, int xo, int yo)
+{
+	bool step;
+	a.xv != 0 ? (step = ((int)a.x/8) % 2) : (step = ((int)a.y/8) % 2);
+	draw_texture_region(g_tileset, a.skin*16 + step*8, 8*8 + a.d*8, 8, 8, a.x-xo, a.y-yo, 8, 8);
+}
+
+void spawn_actor(struct actor *a, int skin)
+{
+	int ix = rand () % (g_map_w-30);
+	int iy = rand () % (g_map_h-30);
+	for(int x = ix; x < ix+30; x++)
+		for(int y = iy; y < iy+30; y++)
+			if(g_map[y*g_map_w+x] == 0)
+			{
+				init_actor(a, x, y, skin);
+				return;
+			}
+}
+
+bool within_tile(int x, int y, int tx, int ty)
+{
+	return (x > tx*8 && y > ty*8 && x < tx*8+8 && y < ty*8+8);
+}
+
+bool move_actor(struct actor *a, float x, float y)
+{
+	float dx = a->x+x, dy = a->y+y;
+	int x1 = dx+2, y1 = dy+1, x2 = dx+6, y2 = dy+8;
+
+	if(x1 < 0 || y1 < 0 || x2 >= g_map_w*8 || y2 >= g_map_h*8)
+		return false;
+	for(int tx = x1/8-1; tx <= x2/8+1; tx++)
+		for(int ty = y1/8-1; ty <= y2/8+1; ty++)
+		{
+			if(tx < 0 || ty < 0 || tx >= g_map_w || ty >= g_map_h)
+				continue;
+			int t = g_map[ty*g_map_w+tx];
+			if(t==2||t==3||t==5||t==6||t==7||t==11)
+				if(within_tile(x1, y1, tx, ty) || within_tile(x2, y1, tx, ty) || within_tile(x1, y2, tx, ty) || within_tile(x2, y2, tx, ty))
+					return false;
+		}
+
+	a->x = dx;
+	a->y = dy;
+	return true;
+}
+
+bool move_actor_and_slide(struct actor *a, float sa, float v)
+{
+	for(float am = 0; am < PI*0.4; am += 0.01)
+	{
+		if(move_actor(a, cosf(sa+am)*v, sinf(sa+am)*v)) return true;
+		if(move_actor(a, cosf(sa-am)*v, sinf(sa-am)*v)) return true;
+	}
+	return false;
+}
+
+int tile_at(int x, int y)
+{
+	return g_map[(y/8)*g_map_w+(x/8)];
+}
+
+void update_actor(struct actor *a)
+{
+	if(a->xv != 0 || a->yv != 0)
+	{
+		float ma = atan2(a->yv, a->xv);
+		float i;
+		for(i = a->speed; i > 0; i -= 0.05)
+			if(move_actor_and_slide(a, ma, i)) break;
+		if(i > 0)
+		{
+			if(a->yv > 0) a->d = 0;
+			else if(a->yv < 0) a->d = 2;
+			if(a->xv > 0) a->d = 1;
+			else if(a->xv < 0) a->d = 3;
+		}
+	}
+
+	a->near_open_door = false;
+	a->near_closed_door = false;
+	a->near_closed_cabinet = false;
+	a->near_window = false;
+	int offsets[8] = {
+		0, 1,
+		1, 0,
+		0, -1,
+		-1, 0,
+	};
+	for(int i = 0; i < 4; i++)
+	{
+		int x = a->x+4+offsets[i*2]*8;
+		int y = a->y+4+offsets[i*2+1]*8;
+		int t = tile_at(x, y);
+		bool near = true;
+		if(t == 6)
+			a->near_window = true;
+		if(t == 7)
+			a->near_closed_cabinet = true;
+		else if(t == 5)
+			a->near_closed_door = true;
+		else if(t == 9)
+			a->near_open_door = true;
+		else
+			near = false;
+		if(near) break;
+	}
+
+	a->near_item = -1;
+	int i;
+	for(i = 0; g_items[i].type != -1; i++)
+		if(pow(g_items[i].x-a->x-4, 2) + pow(g_items[i].y-a->y-4, 2) < 8*8)
+			break;
+	if(g_items[i].type != -1) a->near_item = i;
+}
+
+void actor_smash(struct actor a)
+{
+	int offsets[8] = {
+		0, 1,
+		1, 0,
+		0, -1,
+		-1, 0,
+	};
+	for(int i = 0; i < 4; i++)
+	{
+		if((a.xv == offsets[i*2]*-1 && a.xv != 0)||(a.yv == offsets[i*2+1]*-1 && a.yv != 0))
+			continue;
+		int x = a.x+4+offsets[i*2]*8;
+		int y = a.y+4+offsets[i*2+1]*8;
+		int *t = &g_map[(y/8)*g_map_w+(x/8)];
+		if(*t == 6)
+			*t = 10;
+		else if(*t == 5)
+			*t = 8;
+	}
+}
+
 void teleport_actor_near(struct actor *a, int tx, int ty)
 {
 	int x, y;
@@ -598,31 +601,27 @@ void teleport_actor_near(struct actor *a, int tx, int ty)
 void actor_interact_tile(struct actor a)
 {
 	int offsets[8] = {
-		0, -1,
 		0, 1,
-		-1, 0,
 		1, 0,
+		0, -1,
+		-1, 0,
 	};
 	for(int i = 0; i < 4; i++)
 	{
 		int x = a.x + 4 + offsets[i*2]*8;
 		int y = a.y + 4 + offsets[i*2+1]*8;
 		int *t = &g_map[(y/8)*g_map_w+(x/8)];
+		bool interacted = true;
 		if(*t == 7)
-		{
 			*t = 11;
-			break;
-		}
-		if(*t == 5)
-		{
+		else if(*t == 5)
 			*t = 9;
-			break;
-		}
-		if(*t == 9)
-		{
+		else if(*t == 9)
 			*t = 5;
+		else
+			interacted = false;
+		if(interacted)
 			break;
-		}
 	}
 }
 
@@ -632,6 +631,8 @@ void add_item(int x, int y, int type)
 	for(i = 0; g_items[i].type != -1; i++);
 	g_items[i].x = x;
 	g_items[i].y = y;
+	g_items[i].xv = 0;
+	g_items[i].yv = 0;
 	g_items[i].type = type;
 }
 
@@ -640,15 +641,84 @@ void draw_item(struct item i, int xo, int yo)
 	draw_texture_region(g_tileset, i.type*8, 3*8, 8, 8, i.x-4-xo, i.y-4-yo, 8, 8);
 }
 
+void delete_item(struct item *it)
+{
+	int i, j;
+	for(i = 0; &g_items[i] != it; i++);
+	for(j = 0; g_items[j+1].type != -1; j++);
+	struct item *s = &g_items[j];
+	struct item *d = &g_items[i];
+	d->x = s->x;
+	d->y = s->y;
+	d->type = s->type;
+	d->xv = s->xv;
+	d->yv = s->yv;
+	s->type = -1;
+}
+
+int projectile_item_at(int x, int y)
+{
+	for(int i = 0; g_items[i].type != -1; i++)
+	{
+		struct item *it = &g_items[i];
+		if(fabs(it->xv) < 1 == 0 && fabs(it->yv) < 1 == 0)
+			continue;
+		if(pow(x-it->x, 2) + pow(y-it->y, 2) < 4*4)
+			return i;
+	}
+	return -1;
+}
+
+bool update_item(struct item *it)
+{
+	if(it->xv == 0 && it->yv == 0)
+		return false;
+	it->x += it->xv;
+	it->y += it->yv;
+	int t = tile_at(it->x, it->y);
+	if(t==2||t==3||(t>=5&&t<=7)||t==11)
+	{
+		it->x -= it->xv;
+		it->y -= it->yv;
+		it->xv *= -1;
+		it->yv *= -1;
+	}
+	if(it->xv > 0) it->xv -= 0.5;
+	if(it->yv > 0) it->yv -= 0.5;
+	if(it->xv < 0) it->xv += 0.5;
+	if(it->yv < 0) it->yv += 0.5;
+	return true;
+}
+
+void actor_throw_item(struct actor *a, int type)
+{
+	int vels[8] = {
+		0, 1,
+		1, 0,
+		0, -1,
+		-1, 0,
+	};
+	int i;
+	for(i = 0; g_items[i].type != -1; i++);
+	int xv = vels[a->d*2]*4;
+	int yv = vels[a->d*2+1]*4;
+	add_item(a->x+4+xv, a->y+4+yv, type);
+	g_items[i].xv = xv;
+	g_items[i].yv = yv;
+}
+
 void play_game()
 {
 	SDL_Event event;
 	struct actor player, killer;
 	init_map();
-	spawn_player_and_killer(&player, &killer);
-	bool quit = false, redraw = true, killer_chasing = false;
+	spawn_actor(&player, 0);
+	init_actor(&killer, 0, 0, 1);
+	teleport_actor_near(&killer, player.x+4, player.y+4);
+	bool quit = false, redraw = true, killer_chasing = false, player_full = false;
 	const Uint8 *keyboard_state = SDL_GetKeyboardState(NULL);
-	int last_update = SDL_GetTicks(), camera_x = player.x + 4, camera_y = player.y + 4, killer_chase_counter = 0, cabinet_count = 0, items_left = 3;
+	int last_update = SDL_GetTicks(), camera_x = player.x + 4, camera_y = player.y + 4;
+	int killer_chase_counter = 200, cabinet_count = 0, items_left = 5, player_selected = 0, throw_charge = 0;
 	int player_items[3] = {-1, -1, -1};
 	for(int i = 0; i < MAX_STUFF; i++)
 		g_items[i].type = -1;
@@ -690,14 +760,32 @@ void play_game()
 				case SDLK_RIGHT:
 					player.xv = 1;
 					break;
+				}
+				break;
+			case SDL_KEYUP:
+				switch(event.key.keysym.sym)
+				{
 				case SDLK_z:
+					if(player.near_item != -1 && !player_full)
+					{
+						int i;
+						for(i = 0; i < 3; i++)
+							if(player_items[i] == -1) break;
+						player_items[i] = g_items[player.near_item].type;
+						delete_item(&g_items[player.near_item]);
+						for(i = 0; i < 3; i++)
+							if(player_items[i] == -1) break;
+						if(i >= 3) player_full = true;
+						redraw = true;
+						break;
+					}
 					if(player.near_open_door||player.near_closed_door||player.near_closed_cabinet)
 					{
 						if(player.near_closed_cabinet)
 						{
-							if(rand() % cabinet_count >= cabinet_count - items_left * 2 && items_left > 0)
+							if(rand() % cabinet_count >= cabinet_count - items_left && items_left > 0)
 							{
-								int t = 3 - items_left;
+								int t = 5 - items_left;
 								add_item(player.x+4, player.y+4, t);
 								items_left--;
 							}
@@ -707,11 +795,17 @@ void play_game()
 						redraw = true;
 					}
 					break;
-				}
-				break;
-			case SDL_KEYUP:
-				switch(event.key.keysym.sym)
-				{
+				case SDLK_x:
+					if(throw_charge > 15)
+					{
+						throw_charge = 0;
+						break;
+					}
+					player_selected++;
+					if(player_selected >= 3)
+						player_selected = 0;
+					redraw = true;
+					break;
 				case SDLK_UP:
 					if(player.yv == -1) player.yv = 0;
 					break;
@@ -732,6 +826,23 @@ void play_game()
 		int current_time = SDL_GetTicks();
 		if(current_time - last_update > 30)
 		{
+			bool items_moved = false;
+			for(int i = 0; g_items[i].type != -1; i++)
+				if(update_item(&g_items[i]))  items_moved = true;
+			if(items_moved)
+				redraw = true;
+
+			if(keyboard_state[SDL_SCANCODE_X] && player_items[player_selected] != -1)
+			{
+				throw_charge++;
+				if(throw_charge > 15)
+				{
+					actor_throw_item(&player, player_items[player_selected]);
+					player_items[player_selected] = -1;
+					redraw = true;
+				}
+			}
+
 			if(killer_chase_counter > 0)
 				killer_chase_counter--;
 			else
@@ -821,16 +932,35 @@ void play_game()
 				for(int i = 0; g_items[i].type != -1; i++)
 					if(pow(player.x+4-g_items[i].x, 2) + pow(player.y+4-g_items[i].y, 2) < 50*50)
 						draw_item(g_items[i], xo, yo);
-				draw_actor(player, xo, yo);
 				if(pow(player.x-killer.x, 2) + pow(player.y-killer.y, 2) < 50*50)
 					draw_actor(killer, xo, yo);
-				if(player.near_open_door)
+				draw_actor(player, xo, yo);
+				if(player_items[player_selected] != -1)
+				{
+					int t = player_items[player_selected];
+					draw_texture_region(g_tileset, (t % 4)*8, 3*8+(t / 4)*8, 8, 8, player.x-xo, player.y-yo, 8, 8);
+				}
+				if(player.near_item != -1 && !player_full)
+					draw_text(player.x-xo-4.5*4, player.y-yo-6-1, "z:take item");
+				else if(player.near_open_door)
 					draw_text(player.x-xo-5*4, player.y-yo-6-1, "z:close door");
 				else if(player.near_closed_door)
 					draw_text(player.x-xo-5.5*4, player.y-yo-6-1, "z:open door");
 				else if(player.near_closed_cabinet)
 					draw_text(player.x-xo-4*4, player.y-yo-6-1, "z:search");
 				draw_texture_region(g_vigenette, 0, 0, 160, 120, player.x+4-80-xo, player.y+4-60-yo, 160, 120);
+				for(int i = 0; i < 3; i++)
+				{
+					SDL_SetRenderDrawColor(g_renderer, 0x38, 0x50, 0x20, 0xff);
+					draw_box(1+i*9, 1, 8, 8);
+					SDL_SetRenderDrawColor(g_renderer, 0x00, 0x00, 0x00, 0xff);
+					int t = player_items[i];
+					if(t != -1)
+					{
+						draw_texture_region(g_tileset, (t % 4)*8, 3*8+(t / 4)*8, 8, 8, 1+i*9, 1, 8, 8);
+					}
+				}
+				draw_texture_region(g_tileset, 2*8, 4*8, 8, 8, 1+player_selected*9, 1+8, 8, 8);
 				SDL_RenderPresent(g_renderer);
 
 				redraw = false;
@@ -898,7 +1028,7 @@ void main_menu()
 			draw_texture_region(g_vigenette, 0, 0, 160, 120, 0, 0, g_width, g_height);
 			draw_text(g_width/2 - 7*4, 6, "slasher escape");
 			draw_text(g_width/2 - 4*4, g_height/2-2*6, "new game\neditor\nquit");
-			draw_texture_region(g_tileset, (bool)(cursor_step / 10)*8, 4*8, 8, 8, g_width/2-8*4, g_height/2-2*6 + cursor_y*6+cursor_yo-1, 8, 8);
+			draw_texture_region(g_tileset, (bool)(cursor_step / 10)*8, 8*8, 8, 8, g_width/2-8*4, g_height/2-2*6 + cursor_y*6+cursor_yo-1, 8, 8);
 			if(!g_fullscreen)
 				draw_text(g_width-20*4, g_height-6, "alt+enter:fullscreen");
 			SDL_RenderPresent(g_renderer);
