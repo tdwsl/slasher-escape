@@ -224,8 +224,7 @@ void toggle_fullscreen()
 	if(g_fullscreen)
 	{
 		SDL_GetCurrentDisplayMode(0, &dm);
-		if(dm.w*dm.h > 1024*768)
-			g_scale = 8;
+		g_scale = ((dm.h/160)>>1)<<1;
 		g_width = dm.w / g_scale;
 		g_height = dm.h / g_scale;
 	}
