@@ -224,7 +224,7 @@ void toggle_fullscreen()
 	if(g_fullscreen)
 	{
 		SDL_GetCurrentDisplayMode(0, &dm);
-		g_scale = ((dm.h/160)>>1)<<1;
+		g_scale = (((dm.h/160)>>1)+1)<<1;
 		g_width = dm.w / g_scale;
 		g_height = dm.h / g_scale;
 	}
@@ -801,7 +801,7 @@ void play_game()
 					}
 					break;
 				case SDLK_x:
-					if(throw_charge > 15)
+					if(throw_charge > 5)
 					{
 						throw_charge = 0;
 						break;
@@ -840,7 +840,7 @@ void play_game()
 			if(keyboard_state[SDL_SCANCODE_X] && player_items[player_selected] != -1)
 			{
 				throw_charge++;
-				if(throw_charge > 15)
+				if(throw_charge > 5)
 				{
 					actor_throw_item(&player, player_items[player_selected]);
 					player_items[player_selected] = -1;
