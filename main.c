@@ -65,6 +65,12 @@ void init_sdl()
 	ensure((g_renderer = SDL_CreateRenderer(g_window, -1, SDL_RENDERER_SOFTWARE)), "renderer");
 	SDL_SetRenderDrawColor(g_renderer, 0x00, 0x00, 0x00, 0xff);
 
+	SDL_Surface *icon = NULL;
+	ensure((icon = SDL_LoadBMP("data/icon.bmp")), "icon");
+	SDL_SetWindowIcon(g_window, icon);
+	SDL_FreeSurface(icon);
+	icon = NULL;
+
 	ensure((g_tileset = load_texture("data/tileset.bmp")), "tileset");
 	ensure((g_font = load_texture("data/font.bmp")), "font");
 	ensure((g_vigenette = load_texture("data/vigenette.bmp")), "vigenette");
@@ -350,6 +356,7 @@ void game_over()
 	bool quit = false, redraw = true;
 	int frame = 0, stage = 0;
 	int max_frames[4] = {12, 20, 25, 50};
+	const Uint8 *keyboard_state = SDL_GetKeyboardState(NULL);
 
 	while(!quit)
 	{
@@ -372,7 +379,9 @@ void game_over()
 				case SDLK_z:
 				case SDLK_x:
 				case SDLK_RETURN:
-					if(stage == 3)
+					if(keyboard_state[SDL_SCANCODE_LALT])
+						toggle_fullscreen();
+					else if(stage == 3)
 						quit = true;
 					break;
 				}
@@ -395,8 +404,8 @@ void game_over()
 				draw_texture_region(g_gameover, 40, 60, 40, 60, g_width/2-20, g_height-60+2+mul*15, 40, 60);
 				break;
 			case 2:
-				draw_texture_region(g_gameover, 80, 0, 40, 60, g_width/2-20, g_height/2-30-mul*15, 40, 60);
-				draw_texture_region(g_gameover, 80, 60, 40, 60, g_width/2-20, g_height-60+2+mul*10, 40, 60);
+				draw_texture_region(g_gameover, 80, 0, 40, 60, g_width/2-20, g_height/2-30+mul*5, 40, 60);
+				draw_texture_region(g_gameover, 80, 60, 40, 60, g_width/2-20, g_height-60+2+mul*15, 40, 60);
 				break;
 			case 3:
 				draw_texture_region(g_gameover, 120, 0, 40, 60, g_width/2-20, g_height/2-60, 40, 60);
@@ -681,7 +690,9 @@ bool update_item(struct item *it)
 	it->x += it->xv;
 	it->y += it->yv;
 	int t = tile_at(it->x, it->y);
-	if(t==2||t==3||(t>=5&&t<=7)||t==11)
+	if(t==6)
+		g_map[(int)(it->y/8)*g_map_w+(int)(it->x/8)] = 10;
+	else if(t==2||t==3||t==5||t==7||t==11)
 	{
 		it->x -= it->xv;
 		it->y -= it->yv;
@@ -720,10 +731,10 @@ void play_game()
 	spawn_actor(&player, 0);
 	init_actor(&killer, 0, 0, 1);
 	teleport_actor_near(&killer, player.x+4, player.y+4);
-	bool quit = false, redraw = true, killer_chasing = false, player_full = false;
+	bool quit = false, redraw = true, killer_chasing = false, player_full = false, killer_ko = false;
 	const Uint8 *keyboard_state = SDL_GetKeyboardState(NULL);
 	int last_update = SDL_GetTicks(), camera_x = player.x + 4, camera_y = player.y + 4;
-	int killer_chase_counter = 200, cabinet_count = 0, items_left = 5, player_selected = 0, throw_charge = 0;
+	int killer_chase_counter = 200, cabinet_count = 0, items_left = 5, player_selected = 0, throw_charge = 0, killer_stun = 0;
 	int player_items[3] = {-1, -1, -1};
 	for(int i = 0; i < MAX_STUFF; i++)
 		g_items[i].type = -1;
@@ -848,32 +859,69 @@ void play_game()
 				}
 			}
 
-			if(killer_chase_counter > 0)
-				killer_chase_counter--;
+			if(killer_stun > 0)
+			{
+				killer_stun--;
+				if(killer_stun <= 0)
+				{
+					killer_ko = false;
+					redraw = true;
+				}
+			}
 			else
 			{
-				killer_chasing = !killer_chasing;
-				if(killer_chasing)
-					killer_chase_counter = 150 + rand() % 75;
+				if(killer_chase_counter > 0)
+					killer_chase_counter--;
 				else
-					killer_chase_counter = 100 - rand() % 50;
-			}
+				{
+					killer_chasing = !killer_chasing;
+					if(killer_chasing)
+						killer_chase_counter = 150 + rand() % 75;
+					else
+						killer_chase_counter = 100 - rand() % 50;
+				}
+				killer.xv = 0;
+				killer.yv = 0;
+				if(killer.x < player.x) killer.xv = 1;
+				if(killer.x > player.x) killer.xv = -1;
+				if(killer.y < player.y) killer.yv = 1;
+				if(killer.y > player.y) killer.yv = -1;
+				if(!killer_chasing)
+				{
+					killer.yv *= -1;
+					killer.xv *= -1;
+				}
+				if((killer.near_window||killer.near_closed_door) && killer_chasing)
+				{
+					actor_smash(killer);
+					redraw = true;
+				}
+				if(tile_at(killer.x+4, killer.y+4) == 4)
+					killer.speed = 1.75;
+				else
+					killer.speed = 1.25;
+				if(!killer_chasing)
+					killer.speed *= 0.5;
+				update_actor(&killer);
+				if(pow(player.x-killer.x, 2) + pow(player.y-killer.y, 2) < 50*50)
+					redraw = true;
+				else if(pow(player.x-killer.x, 2) + pow(player.y-killer.y, 2) > 160*160 && killer_chasing)
+					teleport_actor_near(&killer, player.x, player.y);
 
-			killer.xv = 0;
-			killer.yv = 0;
-			if(killer.x < player.x) killer.xv = 1;
-			if(killer.x > player.x) killer.xv = -1;
-			if(killer.y < player.y) killer.yv = 1;
-			if(killer.y > player.y) killer.yv = -1;
-			if(!killer_chasing)
-			{
-				killer.yv *= -1;
-				killer.xv *= -1;
-			}
-			if((killer.near_window||killer.near_closed_door) && killer_chasing)
-			{
-				actor_smash(killer);
-				redraw = true;
+				for(int i = 0; g_items[i].type != -1; i++)
+				{
+					struct item *it = &g_items[i];
+					if(pow(killer.x+4-it->x, 2) + pow(killer.y+4-it->y, 2) < 8*8 && (it->xv != 0 || it->yv != 0))
+					{
+						killer_stun = 20;
+						killer_ko = false;
+						killer.x += it->xv;
+						killer.y += it->yv;
+						it->xv = 0;
+						it->yv = 0;
+						break;
+					}
+				}
 			}
 
 			if(tile_at(player.x+4, player.y+4) == 4)
@@ -883,18 +931,6 @@ void play_game()
 			update_actor(&player);
 			if(player.xv != 0 || player.yv != 0)
 				redraw = true;
-
-			if(tile_at(killer.x+4, killer.y+4) == 4)
-				killer.speed = 1.75;
-			else
-				killer.speed = 1.25;
-			if(!killer_chasing)
-				killer.speed *= 0.5;
-			update_actor(&killer);
-			if(pow(player.x-killer.x, 2) + pow(player.y-killer.y, 2) < 50*50)
-				redraw = true;
-			else if(pow(player.x-killer.x, 2) + pow(player.y-killer.y, 2) > 160*160 && killer_chasing)
-				teleport_actor_near(&killer, player.x, player.y);
 
 			int xm, ym, ocx, ocy;
 			ocx = camera_x;
@@ -914,7 +950,7 @@ void play_game()
 
 			if(camera_x != ocx || camera_y != ocy) redraw = true;
 
-			if(pow(player.x-killer.x, 2) + pow(player.y-killer.y, 2) < 7*7)
+			if(pow(player.x-killer.x, 2) + pow(player.y-killer.y, 2) < 7*7 && killer_stun <= 0)
 			{
 				game_over();
 				quit = true;
@@ -938,7 +974,12 @@ void play_game()
 					if(pow(player.x+4-g_items[i].x, 2) + pow(player.y+4-g_items[i].y, 2) < 50*50)
 						draw_item(g_items[i], xo, yo);
 				if(pow(player.x-killer.x, 2) + pow(player.y-killer.y, 2) < 50*50)
-					draw_actor(killer, xo, yo);
+				{
+					if(killer_ko)
+						draw_texture_region(g_tileset, 2*8, 7*8, 8, 8, killer.x-xo, killer.y-yo, 8, 8);
+					else
+						draw_actor(killer, xo, yo);
+				}
 				draw_actor(player, xo, yo);
 				if(player_items[player_selected] != -1)
 				{
