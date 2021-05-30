@@ -29,7 +29,13 @@ struct actor
 	bool near_open_door, near_closed_door, near_closed_cabinet, near_window;
 };
 
+struct item
+{
+	int type, x, y;
+};
+
 int *g_map;
+struct item g_items[MAX_STUFF];
 int g_map_w, g_map_h;
 
 void ensure(bool cond, const char *desc)
@@ -620,16 +626,35 @@ void actor_interact_tile(struct actor a)
 	}
 }
 
+void add_item(int x, int y, int type)
+{
+	int i;
+	for(i = 0; g_items[i].type != -1; i++);
+	g_items[i].x = x;
+	g_items[i].y = y;
+	g_items[i].type = type;
+}
+
+void draw_item(struct item i, int xo, int yo)
+{
+	draw_texture_region(g_tileset, i.type*8, 3*8, 8, 8, i.x-4-xo, i.y-4-yo, 8, 8);
+}
+
 void play_game()
 {
+	SDL_Event event;
 	struct actor player, killer;
 	init_map();
 	spawn_player_and_killer(&player, &killer);
-
-	SDL_Event event;
 	bool quit = false, redraw = true, killer_chasing = false;
 	const Uint8 *keyboard_state = SDL_GetKeyboardState(NULL);
-	int last_update = SDL_GetTicks(), camera_x = player.x + 4, camera_y = player.y + 4, killer_chase_counter = 0;
+	int last_update = SDL_GetTicks(), camera_x = player.x + 4, camera_y = player.y + 4, killer_chase_counter = 0, cabinet_count = 0, items_left = 3;
+	int player_items[3] = {-1, -1, -1};
+	for(int i = 0; i < MAX_STUFF; i++)
+		g_items[i].type = -1;
+	for(int x = 0; x < g_map_w; x++)
+		for(int y = 0; y < g_map_h; y++)
+			if(g_map[y*g_width+x] == 7) cabinet_count++;
 
 	while(!quit)
 	{
@@ -668,6 +693,16 @@ void play_game()
 				case SDLK_z:
 					if(player.near_open_door||player.near_closed_door||player.near_closed_cabinet)
 					{
+						if(player.near_closed_cabinet)
+						{
+							if(rand() % cabinet_count >= cabinet_count - items_left * 2 && items_left > 0)
+							{
+								int t = 3 - items_left;
+								add_item(player.x+4, player.y+4, t);
+								items_left--;
+							}
+							cabinet_count--;
+						}
 						actor_interact_tile(player);
 						redraw = true;
 					}
@@ -783,6 +818,9 @@ void play_game()
 						int t = g_map[y*g_map_w+x];
 						draw_texture_region(g_tileset, (t % 4)*8, (t / 4)*8, 8, 8, x*8-xo, y*8-yo, 8, 8);
 					}
+				for(int i = 0; g_items[i].type != -1; i++)
+					if(pow(player.x+4-g_items[i].x, 2) + pow(player.y+4-g_items[i].y, 2) < 50*50)
+						draw_item(g_items[i], xo, yo);
 				draw_actor(player, xo, yo);
 				if(pow(player.x-killer.x, 2) + pow(player.y-killer.y, 2) < 50*50)
 					draw_actor(killer, xo, yo);
