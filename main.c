@@ -1,5 +1,4 @@
 #include <SDL2/SDL.h>
-#include <SDL2/SDL_image.h>
 #include <stdio.h>
 #include <stdbool.h>
 #include <stdlib.h>
@@ -46,22 +45,30 @@ void ensure(bool cond, const char *desc)
 	exit(1);
 }
 
+SDL_Texture *load_texture(const char *filename)
+{
+	SDL_Surface *loaded_surface = SDL_LoadBMP(filename);
+	SDL_SetColorKey(loaded_surface, SDL_TRUE, SDL_MapRGB(loaded_surface->format, 0xff, 0x00, 0xff));
+	SDL_Texture *new_texture = SDL_CreateTextureFromSurface(g_renderer, loaded_surface);
+	SDL_FreeSurface(loaded_surface);
+	return new_texture;
+}
+
 void init_sdl()
 {
-	ensure(SDL_Init(SDL_INIT_EVERYTHING) >= 0, "sdl");
+	ensure((SDL_Init(SDL_INIT_EVERYTHING) >= 0), "sdl");
 
-	ensure(g_window = SDL_CreateWindow("Slasher Escape", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, WINDOW_W, WINDOW_H, SDL_WINDOW_SHOWN), "window");
+	ensure((g_window = SDL_CreateWindow("Slasher Escape", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, WINDOW_W, WINDOW_H, SDL_WINDOW_SHOWN)), "window");
 	g_width = WINDOW_W / g_scale;
 	g_height = WINDOW_H / g_scale;
 
-	ensure(g_renderer = SDL_CreateRenderer(g_window, -1, SDL_RENDERER_SOFTWARE), "renderer");
+	ensure((g_renderer = SDL_CreateRenderer(g_window, -1, SDL_RENDERER_SOFTWARE)), "renderer");
 	SDL_SetRenderDrawColor(g_renderer, 0x00, 0x00, 0x00, 0xff);
-	ensure((IMG_Init(IMG_INIT_PNG) & IMG_INIT_PNG) == IMG_INIT_PNG, "image extension");
 
-	ensure(g_tileset = SDL_CreateTextureFromSurface(g_renderer, IMG_Load("data/tileset.png")), "tileset");
-	ensure(g_font = SDL_CreateTextureFromSurface(g_renderer, IMG_Load("data/font.png")), "font");
-	ensure(g_vigenette = SDL_CreateTextureFromSurface(g_renderer, IMG_Load("data/vigenette.png")), "vigenette");
-	ensure(g_gameover = SDL_CreateTextureFromSurface(g_renderer, IMG_Load("data/game_over.png")), "game over");
+	ensure((g_tileset = load_texture("data/tileset.bmp")), "tileset");
+	ensure((g_font = load_texture("data/font.bmp")), "font");
+	ensure((g_vigenette = load_texture("data/vigenette.bmp")), "vigenette");
+	ensure((g_gameover = load_texture("data/game_over.bmp")), "game over");
 }
 
 void end_sdl()
@@ -75,7 +82,6 @@ void end_sdl()
 	SDL_DestroyTexture(g_tileset);
 	g_tileset = NULL;
 
-	IMG_Quit();
 	SDL_DestroyRenderer(g_renderer);
 	g_renderer = NULL;
 	SDL_DestroyWindow(g_window);
@@ -661,7 +667,7 @@ int projectile_item_at(int x, int y)
 	for(int i = 0; g_items[i].type != -1; i++)
 	{
 		struct item *it = &g_items[i];
-		if(fabs(it->xv) < 1 == 0 && fabs(it->yv) < 1 == 0)
+		if(fabs(it->xv) < 1 && fabs(it->yv) < 1)
 			continue;
 		if(pow(x-it->x, 2) + pow(y-it->y, 2) < 4*4)
 			return i;

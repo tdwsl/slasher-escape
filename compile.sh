@@ -1,1 +1,1 @@
-gcc main.c -o slashescape -lSDL2 -lSDL2_image -lm
+gcc -Wall main.c -o slashescape /usr/lib/x86_64-linux-gnu/libSDL2.a -Wl,--no-undefined -lm -ldl -lasound -lm -ldl -lpthread -lpulse-simple -lpulse -lX11 -lXext -lXcursor -lXinerama -lXi -lXrandr -lXss -lXxf86vm -lwayland-egl -lwayland-client -lwayland-cursor -lxkbcommon -lpthread -lrt
