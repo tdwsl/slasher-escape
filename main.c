@@ -115,16 +115,10 @@ void audio_callback(void *userdata, Uint8 *stream, int len)
 		return;
 	}
 	len = (len > g_audio_len ? g_audio_len : len);
-	SDL_MixAudio(stream, g_audio_pos, len, SDL_MIX_MAXVOLUME);
+	SDL_memcpy(stream, g_audio_pos, len);
+	//SDL_MixAudio(stream, g_audio_pos, len, SDL_MIX_MAXVOLUME);
 	g_audio_pos += len;
 	g_audio_len -= len;
-	if(len <= 0)
-	{
-		SDL_PauseAudio(1);
-		g_audio_pos = NULL;
-		g_audio_len = 0;
-		return;
-	}
 }
 
 bool load_wav(struct audio_wav *dest, const char *filename)
@@ -148,12 +142,13 @@ void init_audio()
 
 	g_wav_spec.callback = audio_callback;
 	g_wav_spec.userdata = NULL;
+
 	SDL_AudioSpec desired;
 	SDL_zero(desired);
 	desired.freq = 22050;
-	desired.format = AUDIO_S8;
+	desired.format = AUDIO_U8;
 	desired.channels = 2;
-	desired.samples = 4096;
+	desired.samples = 2048;
 	
 	ensure((SDL_OpenAudio(&g_wav_spec, &desired) >= 0), "audio device");
 	g_audio_pos = NULL;
