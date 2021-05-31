@@ -30,7 +30,7 @@ struct audio_wav
 	Uint8 *buf;
 };
 
-struct audio_wav g_sfx_chop, g_sfx_throw, g_sfx_open, g_sfx_item;
+struct audio_wav g_sfx_chop, g_sfx_throw, g_sfx_open, g_sfx_select, g_sfx_item;
 
 struct actor
 {
@@ -47,6 +47,7 @@ struct item
 
 int *g_map;
 struct item g_items[MAX_STUFF];
+int g_car_parts;
 int g_map_w, g_map_h;
 
 void ensure(bool cond, const char *desc)
@@ -116,7 +117,6 @@ void audio_callback(void *userdata, Uint8 *stream, int len)
 	}
 	len = (len > g_audio_len ? g_audio_len : len);
 	SDL_memcpy(stream, g_audio_pos, len);
-	//SDL_MixAudio(stream, g_audio_pos, len, SDL_MIX_MAXVOLUME);
 	g_audio_pos += len;
 	g_audio_len -= len;
 }
@@ -139,6 +139,7 @@ void init_audio()
 	ensure(load_wav(&g_sfx_throw, "data/sfx/throw.wav"), "throw.wav");
 	ensure(load_wav(&g_sfx_open, "data/sfx/open.wav"), "open.wav");
 	ensure(load_wav(&g_sfx_item, "data/sfx/item.wav"), "item.wav");
+	ensure(load_wav(&g_sfx_select, "data/sfx/select.wav"), "select.wav");
 
 	g_wav_spec.callback = audio_callback;
 	g_wav_spec.userdata = NULL;
@@ -158,6 +159,7 @@ void end_audio()
 {
 	SDL_PauseAudio(1);
 	SDL_CloseAudio();
+	free_wav(&g_sfx_select);
 	free_wav(&g_sfx_item);
 	free_wav(&g_sfx_open);
 	free_wav(&g_sfx_throw);
@@ -167,7 +169,10 @@ void end_audio()
 void play_audio(struct audio_wav wav)
 {
 	if(g_audio_pos != NULL || g_audio_len > 0)
-		return;
+	{
+		g_audio_pos = NULL;
+		g_audio_len = 0;
+	}
 	g_audio_pos = wav.buf;
 	g_audio_len = wav.len;
 	SDL_PauseAudio(0);
@@ -266,7 +271,7 @@ void draw_text(int x, int y, const char *text)
 			c -= 0x61;
 		else if(c == ':')
 			c = 29;
-		else if(c == '\'')
+		else if(c == '/')
 			c = 28;
 		else if(c == '+')
 			c = 27;
@@ -433,7 +438,7 @@ void game_over()
 	int last_update = SDL_GetTicks();
 	bool quit = false, redraw = true;
 	int frame = 0, stage = 0;
-	int max_frames[4] = {12, 20, 25, 50};
+	int max_frames[5] = {12, 20, 25, 20, 30};
 	const Uint8 *keyboard_state = SDL_GetKeyboardState(NULL);
 	SDL_PauseAudio(1);
 	g_audio_len = 0;
@@ -462,7 +467,7 @@ void game_over()
 				case SDLK_RETURN:
 					if(keyboard_state[SDL_SCANCODE_LALT])
 						toggle_fullscreen();
-					else if(stage == 3)
+					else if(stage == 4)
 						quit = true;
 					break;
 				}
@@ -489,6 +494,10 @@ void game_over()
 				draw_texture_region(g_gameover, 80, 60, 40, 60, g_width/2-20, g_height-60+2+5-mul*5, 40, 60);
 				break;
 			case 3:
+				draw_texture_region(g_gameover, 80, 0, 40, 60, g_width/2-20, g_height/2-30-mul*10, 40, 60);
+				draw_texture_region(g_gameover, 120, 60, 40, 60, g_width/2-20, g_height-60+2, 40, 60);
+				break;
+			case 4:
 				draw_texture_region(g_gameover, 120, 0, 40, 60, g_width/2-20, g_height/2-60, 40, 60);
 				draw_texture_region(g_gameover, 120, 60, 40, 60, g_width/2-20, g_height-60+2, 40, 60);
 				draw_text(g_width/2-4.5*4, g_height/2-3, "game over");
@@ -500,7 +509,7 @@ void game_over()
 		int current_time = SDL_GetTicks();
 		if(current_time - last_update > 30)
 		{
-			if(stage < 3)
+			if(stage < 4)
 			{
 				frame++;
 				if(frame > max_frames[stage])
@@ -791,7 +800,13 @@ bool update_item(struct item *it)
 		g_map[(int)(it->y/8)*g_map_w+(int)(it->x/8)] = 12;
 		play_audio(g_sfx_chop);
 	}
-	else if(t==2||t==3||t==5||t==7||t==13)
+	else if((t==8||t==9) && it->type % 2 == 0)
+	{
+		g_car_parts++;
+		play_audio(g_sfx_item);
+		return true;
+	}
+	else if(t==2||t==3||t==5||t==7||t==13||t==8||t==9)
 	{
 		it->x -= it->xv;
 		it->y -= it->yv;
@@ -832,15 +847,24 @@ void play_game()
 	teleport_actor_near(&killer, player.x+4, player.y+4);
 	bool quit = false, redraw = true, killer_chasing = false, player_full = false, killer_ko = false, killer_smashing = false;
 	const Uint8 *keyboard_state = SDL_GetKeyboardState(NULL);
-	int last_update = SDL_GetTicks(), camera_x = player.x + 4, camera_y = player.y + 4;
+	int last_update = SDL_GetTicks(), camera_x = player.x + 4, camera_y = player.y + 4, car_x, car_y;
 	const int total_items = 5;
 	int killer_chase_counter = 200, cabinet_count = 0, items_left = total_items, player_selected = 0, throw_charge = 0, killer_stun = 0;
 	int player_items[3] = {-1, -1, -1};
+	g_car_parts = 0;
 	for(int i = 0; i < MAX_STUFF; i++)
 		g_items[i].type = -1;
 	for(int x = 0; x < g_map_w; x++)
 		for(int y = 0; y < g_map_h; y++)
-			if(g_map[y*g_width+x] == 7) cabinet_count++;
+		{
+			int t = g_map[y*g_map_w+x];
+			if(t == 7) cabinet_count++;
+			if(t == 8 || t == 9)
+			{
+				car_x = x*8;
+				car_y = y*8;
+			}
+		}
 
 	while(!quit)
 	{
@@ -900,7 +924,7 @@ void play_game()
 					{
 						if(player.near_closed_cabinet)
 						{
-							if(rand() % cabinet_count >= cabinet_count - items_left && items_left > 0)
+							if(1 + rand() % cabinet_count >= cabinet_count - items_left && items_left > 0)
 							{
 								int t = total_items - items_left;
 								add_item(player.x+4, player.y+4, t);
@@ -921,7 +945,7 @@ void play_game()
 					player_selected++;
 					if(player_selected >= 3)
 						player_selected = 0;
-					play_audio(g_sfx_item);
+					play_audio(g_sfx_select);
 					redraw = true;
 					break;
 				case SDLK_UP:
@@ -944,11 +968,18 @@ void play_game()
 		int current_time = SDL_GetTicks();
 		if(current_time - last_update > 30)
 		{
-			bool items_moved = false;
+			int o_car_parts = g_car_parts;
 			for(int i = 0; g_items[i].type != -1; i++)
-				if(update_item(&g_items[i]))  items_moved = true;
-			if(items_moved)
-				redraw = true;
+				if(update_item(&g_items[i]))
+				{
+					redraw = true;
+					if(o_car_parts != g_car_parts)
+					{
+						delete_item(&g_items[i]);
+						i--;
+						continue;
+					}
+				}
 
 			if(keyboard_state[SDL_SCANCODE_X] && player_items[player_selected] != -1)
 			{
@@ -958,6 +989,7 @@ void play_game()
 					actor_throw_item(&player, player_items[player_selected]);
 					player_items[player_selected] = -1;
 					play_audio(g_sfx_throw);
+					player_full = false;
 					redraw = true;
 				}
 			}
@@ -1093,6 +1125,12 @@ void play_game()
 					int t = player_items[player_selected];
 					draw_texture_region(g_tileset, (t % 4)*8, 4*8+(t / 4)*8, 8, 8, player.x-xo, player.y-yo, 8, 8);
 				}
+				if(pow(player.x-car_x, 2) + pow(player.y-car_y, 2) < 50*50)
+				{
+					char text[4];
+					sprintf(text, "%d/3", g_car_parts);
+					draw_text(car_x-4*1.5-xo, car_y-1-6-yo, text);
+				}
 				if(player.near_item != -1 && !player_full)
 					draw_text(player.x-xo-4.5*4, player.y-yo-6-1, "z:take item");
 				else if(player.near_open_door)
@@ -1153,14 +1191,14 @@ void main_menu()
 					if(cursor_yo == 0 && cursor_y > 0)
 					{
 						cursor_yo = -1;
-						play_audio(g_sfx_item);
+						play_audio(g_sfx_select);
 					}
 					break;
 				case SDLK_DOWN:
 					if(cursor_yo == 0 && cursor_y < 2)
 					{
 						cursor_yo = 1;
-						play_audio(g_sfx_item);
+						play_audio(g_sfx_select);
 					}
 					break;
 				case SDLK_RETURN:
@@ -1231,7 +1269,7 @@ void main_menu()
 
 		if(confirm)
 		{
-			play_audio(g_sfx_chop);
+			play_audio(g_sfx_item);
 			switch(cursor_y)
 			{
 			case 0:
