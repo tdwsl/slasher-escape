@@ -313,7 +313,7 @@ void toggle_fullscreen()
 	if(g_fullscreen)
 	{
 		SDL_GetCurrentDisplayMode(0, &dm);
-		g_scale = (((dm.h/160)>>1)+1)<<1;
+		g_scale = ((dm.h/120)>>1)<<1;
 		g_width = dm.w / g_scale;
 		g_height = dm.h / g_scale;
 	}
@@ -494,7 +494,7 @@ void game_over()
 				draw_texture_region(g_gameover, 80, 60, 40, 60, g_width/2-20, g_height-60+2+5-mul*5, 40, 60);
 				break;
 			case 3:
-				draw_texture_region(g_gameover, 80, 0, 40, 60, g_width/2-20, g_height/2-30-mul*10, 40, 60);
+				draw_texture_region(g_gameover, 80, 0, 40, 60, g_width/2-20, g_height/2-30-mul*20, 40, 60);
 				draw_texture_region(g_gameover, 120, 60, 40, 60, g_width/2-20, g_height-60+2, 40, 60);
 				break;
 			case 4:
@@ -668,14 +668,15 @@ void update_actor(struct actor *a)
 
 void actor_smash(struct actor a)
 {
-	int offsets[8] = {
+	int offsets[10] = {
+		0, 0,
 		0, 1,
 		1, 0,
 		0, -1,
 		-1, 0,
 	};
 	bool smashed = false;
-	for(int i = 0; i < 4; i++)
+	for(int i = 0; i < 5; i++)
 	{
 		if((a.xv == offsets[i*2]*-1 && a.xv != 0)||(a.yv == offsets[i*2+1]*-1 && a.yv != 0))
 			continue;
@@ -942,6 +943,7 @@ void play_game()
 						throw_charge = 0;
 						break;
 					}
+					throw_charge = 0;
 					player_selected++;
 					if(player_selected >= 3)
 						player_selected = 0;
@@ -1054,8 +1056,7 @@ void play_game()
 					{
 						killer_stun = 15 + rand() % 20;
 						killer_ko = true;
-						killer.x += it->xv;
-						killer.y += it->yv;
+						move_actor(&killer, it->xv, it->yv);
 						it->xv = 0;
 						it->yv = 0;
 						break;
