@@ -17,6 +17,7 @@ SDL_Texture *g_tileset = NULL;
 SDL_Texture *g_font = NULL;
 SDL_Texture *g_vigenette = NULL;
 SDL_Texture *g_gameover = NULL;
+SDL_Texture *g_arrow = NULL;
 int g_scale = 4;
 int g_width = 160, g_height = 120;
 bool g_quit = false, g_fullscreen = false;
@@ -87,10 +88,13 @@ void init_sdl()
 	ensure((g_font = load_texture("data/img/font.bmp")), "font");
 	ensure((g_vigenette = load_texture("data/img/vigenette.bmp")), "vigenette");
 	ensure((g_gameover = load_texture("data/img/game_over.bmp")), "game over");
+	ensure((g_arrow = load_texture("data/img/arrow.bmp")), "arrow texture");
 }
 
 void end_sdl()
 {
+	SDL_DestroyTexture(g_arrow);
+	g_arrow = NULL;
 	SDL_DestroyTexture(g_gameover);
 	g_gameover = NULL;
 	SDL_DestroyTexture(g_vigenette);
@@ -587,7 +591,7 @@ bool move_actor(struct actor *a, float x, float y)
 			if(tx < 0 || ty < 0 || tx >= g_map_w || ty >= g_map_h)
 				continue;
 			int t = g_map[ty*g_map_w+tx];
-			if(t==2||t==3||t==5||t==6||t==7||t==13)
+			if(t==2||t==3||t==5||t==6||t==7||t==13||t==8||t==9)
 				if(within_tile(x1, y1, tx, ty) || within_tile(x2, y1, tx, ty) || within_tile(x1, y2, tx, ty) || within_tile(x2, y2, tx, ty))
 					return false;
 		}
@@ -644,7 +648,6 @@ void update_actor(struct actor *a)
 		int x = a->x+4+offsets[i*2]*8;
 		int y = a->y+4+offsets[i*2+1]*8;
 		int t = tile_at(x, y);
-		bool near = true;
 		if(t == 6)
 			a->near_window = true;
 		if(t == 7)
@@ -653,16 +656,16 @@ void update_actor(struct actor *a)
 			a->near_closed_door = true;
 		else if(t == 11)
 			a->near_open_door = true;
-		else
-			near = false;
-		if(near) break;
 	}
 
 	a->near_item = -1;
 	int i;
 	for(i = 0; g_items[i].type != -1; i++)
-		if(pow(g_items[i].x-a->x-4, 2) + pow(g_items[i].y-a->y-4, 2) < 8*8)
+	{
+		struct item *it = &g_items[i];
+		if(pow(it->x-a->x-4, 2) + pow(it->y-a->y-4, 2) < 8*8 && it->xv == 0 && it->yv == 0)
 			break;
+	}
 	if(g_items[i].type != -1) a->near_item = i;
 }
 
@@ -852,6 +855,9 @@ void play_game()
 	const int total_items = 5;
 	int killer_chase_counter = 200, cabinet_count = 0, items_left = total_items, player_selected = 0, throw_charge = 0, killer_stun = 0;
 	int player_items[3] = {-1, -1, -1};
+	bool items_available[total_items];
+	for(int i = 0; i < total_items; i++)
+		items_available[i] = true;
 	g_car_parts = 0;
 	for(int i = 0; i < MAX_STUFF; i++)
 		g_items[i].type = -1;
@@ -925,9 +931,19 @@ void play_game()
 					{
 						if(player.near_closed_cabinet)
 						{
-							if(1 + rand() % cabinet_count >= cabinet_count - items_left && items_left > 0)
+							int ch;
+							ch = 40;
+							if(cabinet_count <= items_left) ch = 99;
+							if(ch >= rand() % 100 && items_left > 0)
 							{
-								int t = total_items - items_left;
+								int t;
+								while(1)
+								{
+									t = rand() % total_items;
+									if(items_available[t])
+										break;
+								}
+								items_available[t] = false;
 								add_item(player.x+4, player.y+4, t);
 								items_left--;
 							}
@@ -1121,10 +1137,13 @@ void play_game()
 						draw_actor(killer, xo, yo);
 				}
 				draw_actor(player, xo, yo);
+				bool arrow = false;
 				if(player_items[player_selected] != -1)
 				{
 					int t = player_items[player_selected];
 					draw_texture_region(g_tileset, (t % 4)*8, 4*8+(t / 4)*8, 8, 8, player.x-xo, player.y-yo, 8, 8);
+					if(t % 2 == 0)
+						arrow = true;
 				}
 				if(pow(player.x-car_x, 2) + pow(player.y-car_y, 2) < 50*50)
 				{
@@ -1141,6 +1160,14 @@ void play_game()
 				else if(player.near_closed_cabinet)
 					draw_text(player.x-xo-4*4, player.y-yo-6-1, "z:search");
 				draw_texture_region(g_vigenette, 0, 0, 160, 120, player.x+4-80-xo, player.y+4-60-yo, 160, 120);
+				if(arrow)
+				{
+					float a = atan2(car_y-player.y-4, car_x-player.x-4);
+					int r;
+					for(r = 0; a > (PI/4)*(float)(r+0.5); r++);
+					r = 2 + r % 8;
+					draw_texture_region(g_arrow, r*8, 0, 8, 8, player.x+4+cosf(a)*25-xo, player.y+4+sinf(a)*25-yo, 8, 8);
+				}
 				for(int i = 0; i < 3; i++)
 				{
 					SDL_SetRenderDrawColor(g_renderer, 0x38, 0x50, 0x20, 0xff);
@@ -1169,7 +1196,7 @@ void play_game()
 void main_menu()
 {
 	SDL_Event event;
-	bool quit = false, redraw = true, confirm = false;
+	bool quit = false, redraw = true, confirm = false, help = false;
 	int last_update = SDL_GetTicks(), cursor_step = 0, cursor_y = 0, cursor_yo = 0;
 	const Uint8 *keyboard_state = SDL_GetKeyboardState(NULL);
 
@@ -1185,18 +1212,24 @@ void main_menu()
 			case SDL_KEYDOWN:
 				switch(event.key.keysym.sym)
 				{
+				case SDLK_q:
+					if(help) help = false;
+					break;
 				case SDLK_ESCAPE:
-					quit = true;
+					if(help)
+						help = false;
+					else
+						quit = true;
 					break;
 				case SDLK_UP:
-					if(cursor_yo == 0 && cursor_y > 0)
+					if(cursor_yo == 0 && cursor_y > 0 && !help)
 					{
 						cursor_yo = -1;
 						play_audio(g_sfx_select);
 					}
 					break;
 				case SDLK_DOWN:
-					if(cursor_yo == 0 && cursor_y < 2)
+					if(cursor_yo == 0 && cursor_y < 3 && !help)
 					{
 						cursor_yo = 1;
 						play_audio(g_sfx_select);
@@ -1224,13 +1257,27 @@ void main_menu()
 			SDL_RenderClear(g_renderer);
 			SDL_SetRenderDrawColor(g_renderer, 0x00, 0x00, 0x00, 0xff);
 			draw_texture_region(g_vigenette, 0, 0, 160, 120, 0, 0, g_width, g_height);
-			draw_text(g_width/2 - 7*4, 6, "slasher escape");
-			draw_text(g_width/2 - 4*4, g_height/2-2*6, "new game\neditor\nquit");
-			draw_texture_region(g_tileset, (bool)(cursor_step / 10)*8, 8*8, 8, 8, g_width/2-8*4, g_height/2-2*6 + cursor_y*6+cursor_yo-1, 8, 8);
-			if(!g_fullscreen)
-				draw_text(g_width-20*4, g_height-6, "alt+enter:fullscreen");
+			if(help)
+			{
+				draw_text(10, 10, "controls:\nz: interact / use\nx: switch item / hold to throw\narrows: movement");
+				draw_text(10, g_height-10-9*7, "how to play:");
+				draw_text(10, g_height-10-9*6, "search cabinets");
+				draw_texture_region(g_tileset, 3*8, 1*8, 8, 8, 10, g_height-10-9*5, 8, 8);
+				draw_text(10, g_height-10-9*4, "find car parts");
+				for(int i = 0; i < 3; i++)
+					draw_texture_region(g_tileset, ((i*2)%4)*8, 4*8+(i*2/4)*8, 8, 8, 10+i*9, g_height-10-9*3, 8, 8);
+				draw_text(10, g_height-10-9*2, "escape");
+				draw_texture_region(g_tileset, 0, 2*8, 16, 8, 10, g_height-10-9*1, 16, 8);
+			}
+			else
+			{
+				draw_text(g_width/2 - 7*4, 6, "slasher escape");
+				draw_text(g_width/2 - 4*4, g_height/2-2*6, "new game\nhow to play\neditor\nquit");
+				draw_texture_region(g_tileset, (bool)(cursor_step / 10)*8, 8*8, 8, 8, g_width/2-8*4, g_height/2-2*6 + cursor_y*6+cursor_yo-1, 8, 8);
+				if(!g_fullscreen)
+					draw_text(g_width-20*4, g_height-6, "alt+enter:fullscreen");
+			}
 			SDL_RenderPresent(g_renderer);
-
 			redraw = false;
 		}
 
@@ -1277,9 +1324,12 @@ void main_menu()
 				play_game();
 				break;
 			case 1:
-				editor();
+				help = !help;
 				break;
 			case 2:
+				editor();
+				break;
+			case 3:
 				g_quit = true;
 				break;
 			}
