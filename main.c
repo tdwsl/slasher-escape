@@ -18,6 +18,7 @@ SDL_Texture *g_font = NULL;
 SDL_Texture *g_vigenette = NULL;
 SDL_Texture *g_gameover = NULL;
 SDL_Texture *g_arrow = NULL;
+SDL_Texture *g_victory = NULL;
 int g_scale = 4;
 int g_width = 160, g_height = 120;
 bool g_quit = false, g_fullscreen = false;
@@ -89,10 +90,13 @@ void init_sdl()
 	ensure((g_vigenette = load_texture("data/img/vigenette.bmp")), "vigenette");
 	ensure((g_gameover = load_texture("data/img/game_over.bmp")), "game over");
 	ensure((g_arrow = load_texture("data/img/arrow.bmp")), "arrow texture");
+	ensure((g_victory = load_texture("data/img/victory.bmp")), "victory texture");
 }
 
 void end_sdl()
 {
+	SDL_DestroyTexture(g_victory);
+	g_victory = NULL;
 	SDL_DestroyTexture(g_arrow);
 	g_arrow = NULL;
 	SDL_DestroyTexture(g_gameover);
@@ -468,11 +472,12 @@ void game_over()
 				case SDLK_SPACE:
 				case SDLK_z:
 				case SDLK_x:
+					if(stage > 0)
+						quit = true;
+					break;
 				case SDLK_RETURN:
 					if(keyboard_state[SDL_SCANCODE_LALT])
 						toggle_fullscreen();
-					else if(stage == 4)
-						quit = true;
 					break;
 				}
 				break;
@@ -535,6 +540,61 @@ void game_over()
 	}
 
 	SDL_SetRenderDrawColor(g_renderer, 0x00, 0x00, 0x00, 0xff);
+}
+
+void victory()
+{
+	SDL_Event event;
+	int last_update = SDL_GetTicks(), frame = 0;
+	const Uint8 *keyboard_state = SDL_GetKeyboardState(NULL);
+	bool quit = false, redraw = true;
+
+	while(!quit)
+	{
+		while(SDL_PollEvent(&event))
+		{
+			switch(event.type)
+			{
+			case SDL_QUIT:
+				quit = true;
+				g_quit = true;
+				break;
+			case SDL_KEYDOWN:
+				switch(event.key.keysym.sym)
+				{
+				case SDLK_z:
+				case SDLK_x:
+					if(frame < 20)
+						break;
+				case SDLK_q:
+				case SDLK_ESCAPE:
+					quit = true;
+					break;
+				case SDLK_RETURN:
+					if(keyboard_state[SDL_SCANCODE_LALT]) toggle_fullscreen();
+					break;
+				}
+				break;
+			}
+		}
+
+		int current_time = SDL_GetTicks();
+		if(current_time - last_update > 200)
+		{
+			frame++;
+			if(frame > 103) frame = 100;
+			last_update = current_time;
+		}
+
+		if(redraw)
+		{
+			SDL_RenderClear(g_renderer);
+			draw_texture_region(g_victory, 0, 0, 160, 60, 0, g_height-60+2+frame, g_width, 60);
+			draw_texture_region(g_victory, 0, 60, 160, 60, g_width/2-80, g_height-60+2+(frame % 3), 160, 60);
+			if(frame > 20) draw_text(g_width/2-3.5*4, g_height/2-3, "you win");
+			SDL_RenderPresent(g_renderer);
+		}
+	}
 }
 
 void init_actor(struct actor *a, int x, int y, int skin)
@@ -652,11 +712,18 @@ void update_actor(struct actor *a)
 			a->near_window = true;
 		if(t == 7)
 			a->near_closed_cabinet = true;
-		else if(t == 5)
+		if(t == 5)
 			a->near_closed_door = true;
-		else if(t == 11)
+		if(t == 11)
 			a->near_open_door = true;
 	}
+	if(a->near_closed_cabinet)
+	{
+		a->near_closed_door = false;
+		a->near_open_door = false;
+	}
+	if(a->near_closed_door)
+		a->near_open_door = false;
 
 	a->near_item = -1;
 	int i;
@@ -732,11 +799,11 @@ void actor_interact_tile(struct actor a)
 		int y = a.y + 4 + offsets[i*2+1]*8;
 		int *t = &g_map[(y/8)*g_map_w+(x/8)];
 		bool interacted = true;
-		if(*t == 7)
+		if(*t == 7 && a.near_closed_cabinet)
 			*t = 13;
-		else if(*t == 5)
+		else if(*t == 5 && a.near_closed_door)
 			*t = 11;
-		else if(*t == 11)
+		else if(*t == 11 && a.near_open_door)
 			*t = 5;
 		else
 			interacted = false;
@@ -913,6 +980,13 @@ void play_game()
 				switch(event.key.keysym.sym)
 				{
 				case SDLK_z:
+					if(pow(car_x-player.x, 2) + pow(car_y-player.y, 2) < 20*20 && g_car_parts >= 3)
+					{
+						victory();
+						redraw = false;
+						quit = true;
+						break;
+					}
 					if(player.near_item != -1 && !player_full)
 					{
 						int i;
@@ -1151,7 +1225,9 @@ void play_game()
 					sprintf(text, "%d/3", g_car_parts);
 					draw_text(car_x-4*1.5-xo, car_y-1-6-yo, text);
 				}
-				if(player.near_item != -1 && !player_full)
+				if(pow(car_x-player.x, 2) + pow(car_y-player.y, 2) < 20*20 && g_car_parts >= 3)
+					draw_text(player.x-xo-4*4, player.y-yo-6-1, "z:escape");
+				else if(player.near_item != -1 && !player_full)
 					draw_text(player.x-xo-4.5*4, player.y-yo-6-1, "z:take item");
 				else if(player.near_open_door)
 					draw_text(player.x-xo-5*4, player.y-yo-6-1, "z:close door");
