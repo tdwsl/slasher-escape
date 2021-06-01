@@ -32,13 +32,13 @@ struct audio_wav
 	Uint8 *buf;
 };
 
-struct audio_wav g_sfx_chop, g_sfx_throw, g_sfx_open, g_sfx_select, g_sfx_item;
+struct audio_wav g_sfx_chop, g_sfx_throw, g_sfx_open, g_sfx_select, g_sfx_item, g_sfx_zap, g_sfx_shoot;
 
 struct actor
 {
 	int xv, yv, skin, d, near_item;
 	float x, y, speed;
-	bool near_open_door, near_closed_door, near_closed_cabinet, near_window;
+	bool near_open_door, near_closed_door, near_closed_cabinet, near_window, near_tree;
 };
 
 struct item
@@ -148,6 +148,8 @@ void init_audio()
 	ensure(load_wav(&g_sfx_open, "data/sfx/open.wav"), "open.wav");
 	ensure(load_wav(&g_sfx_item, "data/sfx/item.wav"), "item.wav");
 	ensure(load_wav(&g_sfx_select, "data/sfx/select.wav"), "select.wav");
+	ensure(load_wav(&g_sfx_zap, "data/sfx/zap.wav"), "zap.wav");
+	ensure(load_wav(&g_sfx_shoot, "data/sfx/shoot.wav"), "shoot.wav");
 
 	g_wav_spec.callback = audio_callback;
 	g_wav_spec.userdata = NULL;
@@ -167,6 +169,8 @@ void end_audio()
 {
 	SDL_PauseAudio(1);
 	SDL_CloseAudio();
+	free_wav(&g_sfx_shoot);
+	free_wav(&g_sfx_zap);
 	free_wav(&g_sfx_select);
 	free_wav(&g_sfx_item);
 	free_wav(&g_sfx_open);
@@ -321,7 +325,9 @@ void toggle_fullscreen()
 	if(g_fullscreen)
 	{
 		SDL_GetCurrentDisplayMode(0, &dm);
-		g_scale = ((dm.h/120)>>1)<<1;
+		int hs = ((dm.h/120)>>1)<<1;
+		int ws = ((dm.w/160)>>1)<<1;
+		(ws < hs) ? (g_scale = ws) : (g_scale = hs);
 		g_width = dm.w / g_scale;
 		g_height = dm.h / g_scale;
 	}
@@ -470,14 +476,16 @@ void game_over()
 					quit = true;
 					break;
 				case SDLK_SPACE:
+				case SDLK_RETURN:
+					if(keyboard_state[SDL_SCANCODE_LALT])
+					{
+						toggle_fullscreen();
+						break;
+					}
 				case SDLK_z:
 				case SDLK_x:
 					if(stage > 0)
 						quit = true;
-					break;
-				case SDLK_RETURN:
-					if(keyboard_state[SDL_SCANCODE_LALT])
-						toggle_fullscreen();
 					break;
 				}
 				break;
@@ -503,7 +511,7 @@ void game_over()
 				draw_texture_region(g_gameover, 80, 60, 40, 60, g_width/2-20, g_height-60+2+5-mul*5, 40, 60);
 				break;
 			case 3:
-				draw_texture_region(g_gameover, 80, 0, 40, 60, g_width/2-20, g_height/2-30-mul*20, 40, 60);
+				draw_texture_region(g_gameover, 80, 0, 40, 60, g_width/2-20, g_height-60-30-mul*20, 40, 60);
 				draw_texture_region(g_gameover, 120, 60, 40, 60, g_width/2-20, g_height-60+2, 40, 60);
 				break;
 			case 4:
@@ -610,6 +618,7 @@ void init_actor(struct actor *a, int x, int y, int skin)
 	a->near_closed_door = false;
 	a->near_closed_cabinet = false;
 	a->near_window = false;
+	a->near_tree = false;
 	a->near_item = -1;
 }
 
@@ -697,6 +706,7 @@ void update_actor(struct actor *a)
 	a->near_closed_door = false;
 	a->near_closed_cabinet = false;
 	a->near_window = false;
+	a->near_tree = false;
 	int offsets[8] = {
 		0, 1,
 		1, 0,
@@ -716,6 +726,8 @@ void update_actor(struct actor *a)
 			a->near_closed_door = true;
 		if(t == 11)
 			a->near_open_door = true;
+		if(t == 3 && i == a->d)
+			a->near_tree = true;
 	}
 	if(a->near_closed_cabinet)
 	{
@@ -745,7 +757,6 @@ void actor_smash(struct actor a)
 		0, -1,
 		-1, 0,
 	};
-	bool smashed = false;
 	for(int i = 0; i < 5; i++)
 	{
 		if((a.xv == offsets[i*2]*-1 && a.xv != 0)||(a.yv == offsets[i*2+1]*-1 && a.yv != 0))
@@ -753,6 +764,7 @@ void actor_smash(struct actor a)
 		int x = a.x+4+offsets[i*2]*8;
 		int y = a.y+4+offsets[i*2+1]*8;
 		int *t = &g_map[(y/8)*g_map_w+(x/8)];
+		bool smashed = false;
 		if(*t == 6)
 		{
 			*t = 12;
@@ -763,9 +775,12 @@ void actor_smash(struct actor a)
 			*t = 10;
 			smashed = true;
 		}
+		if(smashed)
+		{
+			play_audio(g_sfx_chop);
+			return;
+		}
 	}
-	if(smashed)
-		play_audio(g_sfx_chop);
 }
 
 void teleport_actor_near(struct actor *a, int tx, int ty)
@@ -908,6 +923,47 @@ void actor_throw_item(struct actor *a, int type)
 	g_items[i].yv = yv;
 }
 
+bool shoot(int sx, int sy, int xv, int yv, bool destroys, int dx, int dy)
+{
+	int x = sx, y = sy;
+	for(int i = 0; i < 50; i++)
+	{
+		x += xv;
+		y += yv;
+		int *t = &g_map[(y/8)*g_map_w+(x/8)];
+		if(*t==2||*t==3||*t==8||*t==9)
+			return false;
+		if(*t==5||*t==6)
+		{
+			if(!destroys)
+				return false;
+			if(*t==5)
+				*t = 10;
+			if(*t==6)
+				*t = 12;
+			play_audio(g_sfx_chop);
+		}
+		if(pow(dx-x, 2) + pow(dy-y, 2) < 8*8)
+			return true;
+	}
+	return false;
+}
+
+void actor_chop(struct actor a)
+{
+	int offsets[8] = {
+		0, 1,
+		1, 0,
+		0, -1,
+		-1, 0,
+	};
+	int x = a.x+4+offsets[a.d*2]*8;
+	int y = a.y+4+offsets[a.d*2+1]*8;
+	int *t = &g_map[(y/8)*g_map_w+(x/8)];
+	if(*t == 3)
+		*t = 14;
+}
+
 void play_game()
 {
 	SDL_Event event;
@@ -916,11 +972,11 @@ void play_game()
 	spawn_actor(&player, 0);
 	init_actor(&killer, 0, 0, 1);
 	teleport_actor_near(&killer, player.x+4, player.y+4);
-	bool quit = false, redraw = true, killer_chasing = false, player_full = false, killer_ko = false, killer_smashing = false;
+	bool quit = false, redraw = true, killer_chasing = false, player_full = false, killer_ko = false, killer_smashing = false, killer_tazed = false;
 	const Uint8 *keyboard_state = SDL_GetKeyboardState(NULL);
-	int last_update = SDL_GetTicks(), camera_x = player.x + 4, camera_y = player.y + 4, car_x, car_y;
-	const int total_items = 5;
-	int killer_chase_counter = 200, cabinet_count = 0, items_left = total_items, player_selected = 0, throw_charge = 0, killer_stun = 0;
+	int last_update = SDL_GetTicks(), camera_x = player.x + 4, camera_y = player.y + 4, car_x, car_y, killer_cooldown = 0, ammo = 3;
+	const int total_items = 6;
+	int killer_chase_counter = 200, cabinet_count = 0, items_left = total_items, player_selected = 0, throw_charge = 0, killer_stun = 0, tazer_cooldown = 0;
 	int player_items[3] = {-1, -1, -1};
 	bool items_available[total_items];
 	for(int i = 0; i < total_items; i++)
@@ -983,6 +1039,7 @@ void play_game()
 					if(pow(car_x-player.x, 2) + pow(car_y-player.y, 2) < 20*20 && g_car_parts >= 3)
 					{
 						victory();
+						play_audio(g_sfx_item);
 						redraw = false;
 						quit = true;
 						break;
@@ -992,6 +1049,8 @@ void play_game()
 						int i;
 						for(i = 0; i < 3; i++)
 							if(player_items[i] == -1) break;
+						if(player_items[player_selected] == -1)
+							i = player_selected;
 						player_items[i] = g_items[player.near_item].type;
 						delete_item(&g_items[player.near_item]);
 						for(i = 0; i < 3; i++)
@@ -1024,6 +1083,68 @@ void play_game()
 							cabinet_count--;
 						}
 						actor_interact_tile(player);
+						redraw = true;
+						break;
+					}
+					if(player_items[player_selected] == 3 && player.near_tree)
+					{
+						actor_chop(player);
+						play_audio(g_sfx_chop);
+						redraw = true;
+						break;
+					}
+					if(player_items[player_selected] == 1 || player_items[player_selected] == 5)
+					{
+						if(player_items[player_selected] == 1)
+						{
+							if(ammo > 0)
+								ammo--;
+							else
+								break;
+							play_audio(g_sfx_shoot);
+						}
+						if(player_items[player_selected] == 5)
+						{
+							if(tazer_cooldown > 0)
+								break;
+							tazer_cooldown = 450;
+							play_audio(g_sfx_zap);
+						}
+						int xv, yv;
+						xv = player.xv/player.speed;
+						yv = player.yv/player.speed;
+						if(xv == 0 && yv == 0)
+						{
+							int vels[8] = {
+								0, 1,
+								1, 0,
+								0, -1,
+								-1, 0,
+							};
+							xv = vels[player.d*2];
+							yv = vels[player.d*2+1];
+						}
+						bool destroys = (player_items[player_selected] == 1);
+						bool result = shoot(player.x+4, player.y+4, xv, yv, destroys, killer.x+4, killer.y+4);
+						if(result)
+						{
+							if(player_items[player_selected] == 1)
+							{
+								killer_ko = true;
+								killer_stun = 750;
+								move_actor(&killer, xv, yv);
+							}
+							if(player_items[player_selected] == 5)
+							{
+								killer_stun = 75;
+								killer_tazed = true;
+								if(tile_at(killer.x+4, killer.y+4) == 4)
+								{
+									killer_stun *= 2;
+									killer_ko = true;
+								}
+							}
+						}
 						redraw = true;
 					}
 					break;
@@ -1086,12 +1207,21 @@ void play_game()
 				}
 			}
 
+			if(tazer_cooldown > 0)
+			{
+				tazer_cooldown--;
+				redraw = true;
+			}
+
 			if(killer_stun > 0)
 			{
 				killer_stun--;
+				if(killer_tazed)
+					redraw = true;
 				if(killer_stun <= 0)
 				{
 					killer_ko = false;
+					killer_tazed = false;
 					redraw = true;
 				}
 			}
@@ -1110,6 +1240,8 @@ void play_game()
 					else
 						killer_chase_counter = 100 - rand() % 50;
 				}
+				if(killer_cooldown > 0)
+					killer_cooldown--;
 				killer.xv = 0;
 				killer.yv = 0;
 				if(killer.x < player.x) killer.xv = 1;
@@ -1121,10 +1253,11 @@ void play_game()
 					killer.yv *= -1;
 					killer.xv *= -1;
 				}
-				if((killer.near_window||killer.near_closed_door) && killer_chasing && killer_smashing)
+				if((killer.near_window||killer.near_closed_door) && killer_chasing && killer_smashing && killer_cooldown <= 0)
 				{
 					actor_smash(killer);
 					play_audio(g_sfx_chop);
+					killer_cooldown = 75;
 					redraw = true;
 				}
 				if(tile_at(killer.x+4, killer.y+4) == 4)
@@ -1136,7 +1269,7 @@ void play_game()
 				update_actor(&killer);
 				if(pow(player.x-killer.x, 2) + pow(player.y-killer.y, 2) < 50*50)
 					redraw = true;
-				else if(pow(player.x-killer.x, 2) + pow(player.y-killer.y, 2) > 160*160 && killer_chasing)
+				else if(pow(player.x-killer.x, 2) + pow(player.y-killer.y, 2) > 160*160 && killer_chasing && killer_stun <= 0)
 					teleport_actor_near(&killer, player.x, player.y);
 
 				for(int i = 0; g_items[i].type != -1; i++)
@@ -1144,7 +1277,9 @@ void play_game()
 					struct item *it = &g_items[i];
 					if(pow(killer.x+4-it->x, 2) + pow(killer.y+4-it->y, 2) < 8*8 && (it->xv != 0 || it->yv != 0))
 					{
-						killer_stun = 15 + rand() % 20;
+						killer_stun = 15;
+						if(it->type == 3)
+							killer_stun = 50;
 						killer_ko = true;
 						move_actor(&killer, it->xv, it->yv);
 						it->xv = 0;
@@ -1182,9 +1317,20 @@ void play_game()
 
 			if((pow(player.x-killer.x, 2) + pow(player.y-killer.y, 2) < 7*7) && killer_stun <= 0)
 			{
-				game_over();
-				quit = true;
-				redraw = false;
+				if(player_items[player_selected] == 3)
+				{
+					player_items[player_selected] = -1;
+					play_audio(g_sfx_chop);
+					killer_stun = 500;
+					killer_ko = true;
+					move_actor(&killer, killer.xv*-2, killer.yv*-2);
+				}
+				else
+				{
+					game_over();
+					quit = true;
+					redraw = false;
+				}
 			}
 
 			if(redraw)
@@ -1209,6 +1355,8 @@ void play_game()
 						draw_texture_region(g_tileset, 2*8, 7*8, 8, 8, killer.x-xo, killer.y-yo, 8, 8);
 					else
 						draw_actor(killer, xo, yo);
+					if(killer_tazed)
+						draw_texture_region(g_tileset, 8*(killer_stun % 2), 6*8, 8, 8, killer.x-xo, killer.y-yo, 8, 8);
 				}
 				draw_actor(player, xo, yo);
 				bool arrow = false;
@@ -1216,7 +1364,7 @@ void play_game()
 				{
 					int t = player_items[player_selected];
 					draw_texture_region(g_tileset, (t % 4)*8, 4*8+(t / 4)*8, 8, 8, player.x-xo, player.y-yo, 8, 8);
-					if(t % 2 == 0)
+					if(t % 2 == 0 && pow(player.x-car_x, 2) + pow(player.y-car_y, 2) > 30*30)
 						arrow = true;
 				}
 				if(pow(player.x-car_x, 2) + pow(player.y-car_y, 2) < 50*50)
@@ -1235,6 +1383,10 @@ void play_game()
 					draw_text(player.x-xo-5.5*4, player.y-yo-6-1, "z:open door");
 				else if(player.near_closed_cabinet)
 					draw_text(player.x-xo-4*4, player.y-yo-6-1, "z:search");
+				else if((player_items[player_selected] == 1 && ammo > 0) || (player_items[player_selected] == 5 && tazer_cooldown <= 0))
+					draw_text(player.x-xo-3*4, player.y-yo-6-1, "z:shoot");
+				else if(player.near_tree && player_items[player_selected] == 3)
+					draw_text(player.x-xo-5*4, player.y-yo-6-1, "z:chop tree");
 				draw_texture_region(g_vigenette, 0, 0, 160, 120, player.x+4-80-xo, player.y+4-60-yo, 160, 120);
 				if(arrow)
 				{
@@ -1253,6 +1405,26 @@ void play_game()
 					if(t != -1)
 					{
 						draw_texture_region(g_tileset, (t % 4)*8, 4*8+(t / 4)*8, 8, 8, 1+i*9, 1, 8, 8);
+						if(t == 1)
+						{
+							for(int j = 0; j < ammo; j++)
+							{
+								SDL_SetRenderDrawColor(g_renderer, 0x88, 0x00, 0x00, 0xff);
+								draw_box(1+i*9+j*2, 1+6, 1, 3);
+								SDL_SetRenderDrawColor(g_renderer, 0x80, 0x6f, 0x00, 0xff);
+								draw_pixel(1+i*9+j*2, 1+6);
+							}
+							SDL_SetRenderDrawColor(g_renderer, 0x00, 0x00, 0x00, 0xff);
+						}
+						if(t == 5)
+						{
+							if(tazer_cooldown > 0)
+								SDL_SetRenderDrawColor(g_renderer, 0xff, 0x00, 0x00, 0xff);
+							else
+								SDL_SetRenderDrawColor(g_renderer, 0x00, 0xff, 0x00, 0xff);
+							draw_box(1+i*9+1, 1+6, ((float)(450-tazer_cooldown)/450)*6+1, 1);
+							SDL_SetRenderDrawColor(g_renderer, 0x00, 0x00, 0x00, 0xff);
+						}
 					}
 				}
 				draw_texture_region(g_tileset, 2*8, 5*8, 8, 8, 1+player_selected*9, 1+8, 8, 8);
@@ -1424,7 +1596,16 @@ void play_intro()
 	draw_text(g_width/2-12*4, g_height/2-0.5*6, "a game made by tyler dwsl\n  for the 4mb gamejam");
 	SDL_RenderPresent(g_renderer);
 	SDL_Delay(1500);
-	SDL_FlushEvent(SDL_KEYDOWN);
+	SDL_Event event;
+	while(SDL_PollEvent(&event))
+	{
+		switch(event.type)
+		{
+		case SDL_QUIT:
+			g_quit = true;
+			break;
+		}
+	}
 }
 
 int main()
