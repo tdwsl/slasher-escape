@@ -10,6 +10,7 @@
 #define WINDOW_H 480
 #define MAX_STUFF 25
 #define PI 3.14159
+#define TOTAL_ITEMS 6
 
 SDL_Renderer *g_renderer = NULL;
 SDL_Window *g_window = NULL;
@@ -975,11 +976,18 @@ void play_game()
 	bool quit = false, redraw = true, killer_chasing = false, player_full = false, killer_ko = false, killer_smashing = false, killer_tazed = false;
 	const Uint8 *keyboard_state = SDL_GetKeyboardState(NULL);
 	int last_update = SDL_GetTicks(), camera_x = player.x + 4, camera_y = player.y + 4, car_x, car_y, killer_cooldown = 0, ammo = 3;
-	const int total_items = 6;
-	int killer_chase_counter = 200, cabinet_count = 0, items_left = total_items, player_selected = 0, throw_charge = 0, killer_stun = 0, tazer_cooldown = 0;
+	int killer_chase_counter = 200, cabinet_count = 0, items_left = TOTAL_ITEMS, player_selected = 0, throw_charge = 0, killer_stun = 0, tazer_cooldown = 0;
 	int player_items[3] = {-1, -1, -1};
-	bool items_available[total_items];
-	for(int i = 0; i < total_items; i++)
+	bool items_available[TOTAL_ITEMS];
+	char item_names[TOTAL_ITEMS][25] = {
+		"car key",
+		"shotgun",
+		"gas can",
+		"axe",
+		"car battery",
+		"tazer",
+	};
+	for(int i = 0; i < TOTAL_ITEMS; i++)
 		items_available[i] = true;
 	g_car_parts = 0;
 	for(int i = 0; i < MAX_STUFF; i++)
@@ -1072,7 +1080,7 @@ void play_game()
 								int t;
 								while(1)
 								{
-									t = rand() % total_items;
+									t = rand() % TOTAL_ITEMS;
 									if(items_available[t])
 										break;
 								}
@@ -1235,7 +1243,7 @@ void play_game()
 					if(killer_chasing)
 					{
 						killer_chase_counter = 150 + rand() % 75;
-						killer_smashing = (total_items - items_left > 0);
+						killer_smashing = (TOTAL_ITEMS - items_left > 0);
 					}
 					else
 						killer_chase_counter = 100 - rand() % 50;
@@ -1427,6 +1435,8 @@ void play_game()
 						}
 					}
 				}
+				if(player_items[player_selected] != -1)
+					draw_text(1+3*9, 1, item_names[player_items[player_selected]]);
 				draw_texture_region(g_tileset, 2*8, 5*8, 8, 8, 1+player_selected*9, 1+8, 8, 8);
 				SDL_RenderPresent(g_renderer);
 
@@ -1516,6 +1526,23 @@ void main_menu()
 					draw_texture_region(g_tileset, ((i*2)%4)*8, 4*8+(i*2/4)*8, 8, 8, 10+i*9, g_height-10-9*3, 8, 8);
 				draw_text(10, g_height-10-9*2, "escape");
 				draw_texture_region(g_tileset, 0, 2*8, 16, 8, 10, g_height-10-9*1, 16, 8);
+				draw_text(g_width-10-18*4, g_height-10-9*7, "weapons:");
+				char name[3][10] = {
+					"shotgun",
+					"axe",
+					"tazer",
+				};
+				char desc[3][30] = {
+					"shoots killer",
+					"chops trees/shields",
+					"stuns killer",
+				};
+				for(int i = 0; i < 3; i++)
+				{
+					draw_texture_region(g_tileset, ((i*2+1)%4)*8, 4*8+((i*2+1)/4)*8, 8, 8, g_width-10-18*4, g_height-10-9*(6-i*2), 8, 8);
+					draw_text(g_width-10-18*4+9, g_height-10-9*(6-i*2), name[i]);
+					draw_text(g_width-10-18*4, g_height-10-9*(6-i*2-1), desc[i]);
+				}
 			}
 			else
 			{
