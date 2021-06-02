@@ -571,6 +571,12 @@ void victory()
 			case SDL_KEYDOWN:
 				switch(event.key.keysym.sym)
 				{
+				case SDLK_RETURN:
+					if(keyboard_state[SDL_SCANCODE_LALT])
+					{
+						toggle_fullscreen();
+						break;
+					}
 				case SDLK_z:
 				case SDLK_x:
 					if(frame < 20)
@@ -578,9 +584,6 @@ void victory()
 				case SDLK_q:
 				case SDLK_ESCAPE:
 					quit = true;
-					break;
-				case SDLK_RETURN:
-					if(keyboard_state[SDL_SCANCODE_LALT]) toggle_fullscreen();
 					break;
 				}
 				break;
@@ -1400,8 +1403,8 @@ void play_game()
 				{
 					float a = atan2(car_y-player.y-4, car_x-player.x-4);
 					int r;
-					for(r = 0; a > (PI/4)*(float)(r+0.5); r++);
-					r = 2 + r % 8;
+					for(r = 0; a > (PI/4)*r; r++);
+					r = (r+1) % 8;
 					draw_texture_region(g_arrow, r*8, 0, 8, 8, player.x+4+cosf(a)*25-xo, player.y+4+sinf(a)*25-yo, 8, 8);
 				}
 				for(int i = 0; i < 3; i++)
