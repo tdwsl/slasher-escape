@@ -14,14 +14,14 @@ void audio_callback(void *userdata, Uint8 *stream, int len)
 {
 	if(g_audio_len == 0)
 	{
-		SDL_PauseAudio(1);
 		g_audio_pos = NULL;
+		SDL_PauseAudio(1);
 		return;
 	}
 	len = (len > g_audio_len ? g_audio_len : len);
-	SDL_memcpy(stream, g_audio_pos, len);
-	g_audio_pos += len;
-	g_audio_len -= len;
+	SDL_memcpy(stream, g_audio_pos, (Uint32)len);
+	g_audio_pos += (Uint32)len;
+	g_audio_len -= (Uint32)len;
 }
 
 bool load_wav(struct audio_wav *dest, const char *filename)
@@ -57,7 +57,7 @@ void init_audio()
 	desired.freq = 22050;
 	desired.format = AUDIO_U8;
 	desired.channels = 2;
-	desired.samples = 2048;
+	desired.samples = 1024;
 	
 	ensure((SDL_OpenAudio(&g_wav_spec, &desired) >= 0), "audio device");
 	g_audio_pos = NULL;

@@ -263,8 +263,8 @@ void actor_chop(struct actor a)
 
 bool actor_shoot(struct actor a, bool destroys, int dx, int dy)
 {
-	int x = a.x;
-	int y = a.y;
+	int x = a.x+4;
+	int y = a.y+4;
 	
 	int xv = a.xv/a.speed;
 	int yv = a.yv/a.speed;

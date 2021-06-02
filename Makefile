@@ -1,6 +1,6 @@
 # Output of 'sdl2-config --static-libs' goes here, minus the '-lSDL2'
-LIBS=-Wl,--no-undefined -lm -ldl -lasound -lm -ldl -lpthread -lpulse-simple -lpulse -lsndio -lX11 -lXext -lXcursor -lXinerama -lXi -lXrandr -lXss -lXxf86vm -lwayland-egl -lwayland-client -lwayland-cursor -lxkbcommon -lpthread -lrt -static-libgcc
-# Compiler
+LIBS=-Wl,--no-undefined -lm -ldl -lasound -lm -ldl -lpthread -lpulse-simple -lpulse -lsndio -lX11 -lXext -lXcursor -lXinerama -lXi -lXrandr -lXss -lXxf86vm -lwayland-egl -lwayland-client -lwayland-cursor -lxkbcommon -lpthread -lrt
+# Compiler for linux
 CC=gcc
 # Where our source files are located
 SRCDIR=src
@@ -19,12 +19,12 @@ linux32:
 win64:
 	$(eval MINGW=x86_64-w64-mingw32)
 	$(eval CC=$(MINGW)-gcc)
-	$(CC) -Wall -I$(INCDIR) -I$(SDL)/$(MINGW)/include/ $(SRCDIR)/*.c -o slashescape -L$(SDL)/$(MINGW)/lib -L/usr/$(MINGW)/lib -lmingw32 -lSDL2main -lSDL2 -lm
+	$(CC) -Wall -I$(INCDIR) -I$(SDL)/$(MINGW)/include/ $(SRCDIR)/*.c -o slashescape -L$(SDL)/$(MINGW)/lib -L/usr/$(MINGW)/lib -lmingw32 -lSDL2main -lSDL2 -lm -w -Wl,-subsystem,windows
 	if ! test -f "SDL.dll"; then cp $(SDL)/$(MINGW)/bin/SDL2.dll .; fi
 win32:
 	$(eval MINGW=i686-w64-mingw32)
 	$(eval CC=$(MINGW)-gcc)
-	$(CC) -Wall -I$(INCDIR) -I$(SDL)/$(MINGW)/include/ $(SRCDIR)/*.c -o slashescape -L$(SDL)/$(MINGW)/lib -L/usr/$(MINGW)/lib -lmingw32 -lSDL2main -lSDL2 -lm
+	$(CC) -Wall -I$(INCDIR) -I$(SDL)/$(MINGW)/include/ $(SRCDIR)/*.c -o slashescape -L$(SDL)/$(MINGW)/lib -L/usr/$(MINGW)/lib -lmingw32 -lSDL2main -lSDL2 -lm -w -Wl,-subsystem,windows
 	if ! test -f "SDL.dll"; then cp $(SDL)/$(MINGW)/bin/SDL2.dll .; fi
 
 clean:

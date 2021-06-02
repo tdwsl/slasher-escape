@@ -322,9 +322,9 @@ void play_game()
 					struct item *it = &g_items[i];
 					if(pow(killer.x+4-it->x, 2) + pow(killer.y+4-it->y, 2) < 8*8 && (it->xv != 0 || it->yv != 0))
 					{
-						killer_stun = 15;
+						killer_stun = 25;
 						if(it->type == 3)
-							killer_stun = 50;
+							killer_stun = 55;
 						killer_ko = true;
 						move_actor(&killer, it->xv, it->yv);
 						it->xv = 0;
@@ -440,7 +440,7 @@ void play_game()
 					int r;
 					for(r = 0; a > (PI/4)*r; r++);
 					r = (r+1) % 8;
-					draw_texture_region(g_arrow, r*8, 0, 8, 8, player.x+4+cosf(a)*25-xo, player.y+4+sinf(a)*25-yo, 8, 8);
+					draw_texture_region(g_arrow, r*8, 0, 8, 8, player.x+4+cosf(a)*25-xo-4, player.y+4+sinf(a)*25-yo-4, 8, 8);
 				}
 				for(int i = 0; i < 3; i++)
 				{
@@ -468,7 +468,7 @@ void play_game()
 								SDL_SetRenderDrawColor(g_renderer, 0xff, 0x00, 0x00, 0xff);
 							else
 								SDL_SetRenderDrawColor(g_renderer, 0x00, 0xff, 0x00, 0xff);
-							draw_box(1+i*9+1, 1+6, ((float)(450-tazer_cooldown)/450)*6+1, 1);
+							draw_box(1+i*9+1, 1+6, ((float)(450-tazer_cooldown)/450)*5+1, 1);
 							SDL_SetRenderDrawColor(g_renderer, 0x00, 0x00, 0x00, 0xff);
 						}
 					}

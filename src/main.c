@@ -199,6 +199,11 @@ int main(int argc, char *args[])
 {
 	time_t t;
 	srand(time(&t));
+
+#ifdef __MINGW32__
+	putenv("SDL_AUDIODRIVER=directsound");
+#endif
+
 	init_sdl();
 	init_audio();
 	play_intro();
