@@ -368,6 +368,7 @@ void play_game()
 					killer_stun = 500;
 					killer_ko = true;
 					move_actor(&killer, killer.xv*-2, killer.yv*-2);
+					player_full = false;
 				}
 				else
 				{
