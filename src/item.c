@@ -1,4 +1,5 @@
 #include <stdbool.h>
+#include <math.h>
 #include "image.h"
 #include "item.h"
 #include "map.h"

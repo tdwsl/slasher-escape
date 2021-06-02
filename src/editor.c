@@ -1,5 +1,6 @@
 #include <SDL2/SDL.h>
 #include <stdbool.h>
+#include <stdio.h>
 #include "game.h"
 #include "image.h"
 #include "map.h"

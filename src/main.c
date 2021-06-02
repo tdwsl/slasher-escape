@@ -195,7 +195,7 @@ void play_intro()
 	}
 }
 
-int main()
+int main(int argc, char *args[])
 {
 	time_t t;
 	srand(time(&t));
