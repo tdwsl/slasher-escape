@@ -28,7 +28,7 @@ void play_game()
 	bool quit = false, redraw = true, killer_chasing = false, player_full = false, killer_ko = false, killer_smashing = false, killer_tazed = false;
 	const Uint8 *keyboard_state = SDL_GetKeyboardState(NULL);
 	int last_update = SDL_GetTicks(), camera_x = player.x + 4, camera_y = player.y + 4, car_x, car_y, killer_cooldown = 0, ammo = 3;
-	int killer_chase_counter = 200, cabinet_count = 0, items_left = TOTAL_ITEMS, player_selected = 0, throw_charge = 0, killer_stun = 0, tazer_cooldown = 0;
+	int killer_chase_counter = 200, cabinet_count = 0, items_left = TOTAL_ITEMS, player_selected = 0, throw_charge = 0, killer_stun = 0, taser_cooldown = 0;
 	int player_items[3] = {-1, -1, -1};
 	bool items_available[TOTAL_ITEMS];
 	char item_names[TOTAL_ITEMS][25] = {
@@ -37,7 +37,7 @@ void play_game()
 		"gas can",
 		"axe",
 		"car battery",
-		"tazer",
+		"taser",
 	};
 	for(int i = 0; i < TOTAL_ITEMS; i++)
 		items_available[i] = true;
@@ -165,9 +165,9 @@ void play_game()
 						}
 						if(player_items[player_selected] == 5)
 						{
-							if(tazer_cooldown > 0)
+							if(taser_cooldown > 0)
 								break;
-							tazer_cooldown = 450;
+							taser_cooldown = 450;
 							play_audio(g_sfx_zap);
 						}
 						bool destroys = (player_items[player_selected] == 1);
@@ -252,9 +252,9 @@ void play_game()
 				}
 			}
 
-			if(tazer_cooldown > 0)
+			if(taser_cooldown > 0)
 			{
-				tazer_cooldown--;
+				taser_cooldown--;
 				redraw = true;
 			}
 
@@ -429,7 +429,7 @@ void play_game()
 					draw_text(player.x-xo-5.5*4, player.y-yo-6-1, "z:open door");
 				else if(player.near_closed_cabinet)
 					draw_text(player.x-xo-4*4, player.y-yo-6-1, "z:search");
-				else if((player_items[player_selected] == 1 && ammo > 0) || (player_items[player_selected] == 5 && tazer_cooldown <= 0))
+				else if((player_items[player_selected] == 1 && ammo > 0) || (player_items[player_selected] == 5 && taser_cooldown <= 0))
 					draw_text(player.x-xo-3*4, player.y-yo-6-1, "z:shoot");
 				else if(player.near_tree && player_items[player_selected] == 3)
 					draw_text(player.x-xo-5*4, player.y-yo-6-1, "z:chop tree");
@@ -464,11 +464,11 @@ void play_game()
 						}
 						if(t == 5)
 						{
-							if(tazer_cooldown > 0)
+							if(taser_cooldown > 0)
 								SDL_SetRenderDrawColor(g_renderer, 0xff, 0x00, 0x00, 0xff);
 							else
 								SDL_SetRenderDrawColor(g_renderer, 0x00, 0xff, 0x00, 0xff);
-							draw_box(1+i*9+1, 1+6, ((float)(450-tazer_cooldown)/450)*5+1, 1);
+							draw_box(1+i*9+1, 1+6, ((float)(450-taser_cooldown)/450)*5+1, 1);
 							SDL_SetRenderDrawColor(g_renderer, 0x00, 0x00, 0x00, 0xff);
 						}
 					}

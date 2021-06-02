@@ -90,7 +90,7 @@ void main_menu()
 				char name[3][10] = {
 					"shotgun",
 					"axe",
-					"tazer",
+					"taser",
 				};
 				char desc[3][30] = {
 					"shoots killer",
