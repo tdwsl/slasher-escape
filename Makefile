@@ -9,6 +9,8 @@ INCDIR=include
 # Where SDL2 is located, for mingw
 SDL=SDL2-2.0.14
 
+dynamic:
+	$(CC) -Wall -Iinclude src/*.c -lSDL2 -lm -o slashescape
 linux64:
 	$(eval ARCH=x86_64-linux-gnu)
 	$(CC) -Wall -I$(INCDIR) $(SRCDIR)/*.c -o slashescape /usr/lib/$(ARCH)/libSDL2.a $(LIBS)
@@ -28,5 +30,5 @@ win32:
 	if ! test -f "SDL.dll"; then cp $(SDL)/$(MINGW)/bin/SDL2.dll .; fi
 
 clean:
-	rm slashescape*
-	rm *.dll
+	rm -f slashescape*
+	rm -f *.dll
