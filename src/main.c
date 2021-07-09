@@ -62,6 +62,7 @@ void main_menu()
 					}
 				case SDLK_SPACE:
 				case SDLK_z:
+				case SDLK_0:
 					if(cursor_yo == 0)
 						confirm = true;
 					break;
@@ -77,7 +78,7 @@ void main_menu()
 			draw_texture_region(g_vigenette, 0, 0, 160, 120, 0, 0, g_width, g_height);
 			if(help)
 			{
-				draw_text(10, 10, "controls:\nz: interact / use\nx: switch item / hold to throw\narrows: movement");
+				draw_text(10, 10, "controls:\nz/0: interact / use\nx/equals: switch item / hold to throw\narrows: movement");
 				draw_text(10, g_height-10-9*7, "how to play:");
 				draw_text(10, g_height-10-9*6, "search cabinets");
 				draw_texture_region(g_tileset, 3*8, 1*8, 8, 8, 10, g_height-10-9*5, 8, 8);

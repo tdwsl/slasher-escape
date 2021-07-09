@@ -96,6 +96,7 @@ void play_game()
 				switch(event.key.keysym.sym)
 				{
 				case SDLK_z:
+				case SDLK_0:
 					if(pow(car_x-player.x, 2) + pow(car_y-player.y, 2) < 20*20 && g_car_parts >= 3)
 					{
 						victory();
@@ -194,6 +195,7 @@ void play_game()
 					}
 					break;
 				case SDLK_x:
+				case SDLK_EQUALS:
 					if(throw_charge > 5)
 					{
 						throw_charge = 0;
@@ -239,7 +241,7 @@ void play_game()
 					}
 				}
 
-			if(keyboard_state[SDL_SCANCODE_X] && player_items[player_selected] != -1)
+			if((keyboard_state[SDL_SCANCODE_X] || keyboard_state[SDL_SCANCODE_EQUALS]) && player_items[player_selected] != -1)
 			{
 				throw_charge++;
 				if(throw_charge > 5)

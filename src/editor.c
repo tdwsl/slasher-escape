@@ -58,6 +58,7 @@ void editor()
 					break;
 				case SDLK_TAB:
 				case SDLK_x:
+				case SDLK_EQUALS:
 					editor_tile++;
 					if(editor_tile > 9)
 						editor_tile = 0;
@@ -72,6 +73,7 @@ void editor()
 					}
 				case SDLK_SPACE:
 				case SDLK_z:
+				case SDLK_0:
 					redraw = true;
 					g_map[editor_y*g_map_w+editor_x] = editor_tile;
 					break;

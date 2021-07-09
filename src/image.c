@@ -44,6 +44,11 @@ void init_sdl()
 	ensure((g_gameover = load_texture("data/img/game_over.bmp")), "game over");
 	ensure((g_arrow = load_texture("data/img/arrow.bmp")), "arrow texture");
 	ensure((g_victory = load_texture("data/img/victory.bmp")), "victory texture");
+
+	SDL_DisplayMode dm;
+	SDL_GetDesktopDisplayMode(0, &dm);
+	if(dm.w < WINDOW_W || dm.h < WINDOW_H)
+		toggle_fullscreen();
 }
 
 void end_sdl()

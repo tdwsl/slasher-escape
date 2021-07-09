@@ -43,6 +43,8 @@ void game_over()
 					}
 				case SDLK_z:
 				case SDLK_x:
+				case SDLK_0:
+				case SDLK_EQUALS:
 					if(stage > 0)
 						quit = true;
 					break;

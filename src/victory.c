@@ -34,6 +34,8 @@ void victory()
 					}
 				case SDLK_z:
 				case SDLK_x:
+				case SDLK_0:
+				case SDLK_EQUALS:
 					if(frame < 20)
 						break;
 				case SDLK_q:
