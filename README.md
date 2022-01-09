@@ -1,5 +1,7 @@
 Slasher Escape
 
+![screenshot](https://raw.githubusercontent.com/tdwsl/slasher-escape/main/screenshot.png)
+
 ABOUT
 
 Slasher Escape is a game about running away. Your goal is to gather three car
